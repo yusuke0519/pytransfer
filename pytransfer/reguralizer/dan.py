@@ -1,40 +1,74 @@
 # # -*- coding: utf-8 -*-
-import os
-import numpy as np
-import torch
 from torch import nn
-from torch.utils import data
-from torch.autograd import Variable
 
-from pytransfer.learners.utils import get_classifier, SpectralNorm
-
-
-class Discriminator(nn.Module):
-    def __init__(self, num_domains, input_shape, hiddens, sn=False, dropout=0.0, use_softmax=True, label_dim=None, bias=True):
-        super(Discriminator, self).__init__()
-	self.num_domains = num_domains
-        self.discriminator = get_classifier(hiddens, input_shape[1], dropout=dropout, sn=sn)
-        module = nn.Linear(hiddens[-1], num_domains, bias=bias)
-        if sn:
-            module = SpectralNorm(module)
-        self.linear = module
-        if label_dim is not None:
-            self.label_linear = nn.Linear(label_dim, num_domains)
-            self.onehot_converter = torch.sparse.torch.eye(label_dim)
-
-        if use_softmax:
-            self.activation = nn.LogSoftmax(dim=-1)
-
-    def forward(self, input_data):
-        z = self.preactivation(input_data)
-        if hasattr(self, 'activation'):
-            z = self.activation(z)
-        return z
-
-    def preactivation(self, input_data):
-        X = input_data
-        z = self.discriminator(X)
-        z = self.linear(z)
-        return z
+from pytransfer.reguralizer.utils import Discriminator
+from pytransfer.reguralizer import _Reguralizer
 
 
+class DANReguralizer(_Reguralizer):
+    """ Domain advesarial reguralization for learning invariant representations.
+
+    This is a special case of MultipleDAN (num_discriminator=1 and KL_weight=0).
+
+    Reference
+    ---------
+    https://arxiv.org/abs/1505.07818
+    http://papers.nips.cc/paper/6661-controllable-invariance-through-adversarial-feature-learning
+
+    """
+
+    def __init__(self, learner, D=None, discriminator_config=None, K=1):
+        """
+        Initialize dan base reguralizer
+
+        Parameter
+        ---------
+        learner : instance of Learner
+          TBA
+        discriminator_config : dict
+          configuration file for the discriminator
+        K : int
+          the # update of D in each iterations
+        """
+        super(DANReguralizer, self).__init__()
+
+        self.stop_update = D is not None  # if D is shared with others, then not update here
+        if D is None:
+            D = Discriminator(**discriminator_config)
+        self.D = D.cuda()
+        self.num_output = self.D.num_domains
+        # TODO: DANReguralizer should not assume that D has an attribute num_domain
+
+        self.learner = learner
+        self.K = K
+        self.criterion = nn.NLLLoss()
+        self.loader = None
+
+    def forward(self, X):
+        z = self.learner.E(X)
+        return self.D(z)
+
+    def loss(self, X, y, d):
+        d_pred = self(X)
+        d_loss = self.criterion(d_pred, d)
+        return -1 * d_loss
+
+    def d_loss(self, X, y, d):
+        z = self.learner.E(X)
+        d_pred = self.D(z)
+        d_loss = self.criterion(d_pred, d)
+        return d_loss
+
+    def update(self):
+        if self.stop_update:
+            return None
+
+        for _ in range(self.K):
+            self.optimizer.zero_grad()
+            X, _, d = self.get_batch()
+            d_loss = self.d_loss(X, _, d)
+            d_loss.backward()
+            self.optimizer.step()
+
+    def parameters(self):
+        return self.D.parameters()

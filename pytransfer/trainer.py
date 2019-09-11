@@ -1,5 +1,4 @@
 # # -*- coding: utf-8 -*-
-import itertools
 from future.utils import iteritems
 import os
 from collections import OrderedDict
@@ -10,11 +9,6 @@ import torch
 from torch import nn
 from torch.utils import data
 from torch.autograd import Variable
-
-from dan import Discriminator
-from pytransfer.datasets.utils import get_loader_for_domain
-from pytransfer.learners.utils import get_classifier
-from pytransfer.learners.utils import SpectralNorm
 
 
 class Learner(nn.Module):
@@ -49,13 +43,12 @@ class Learner(nn.Module):
     def losses(self, X, y, d):
         yhat = self(X)
         y_loss = self.criterion(yhat, y)
-        loss = y_loss
         losses = {}
         losses['y'] = y_loss.data[0]
         for i, (reguralizer, alpha) in enumerate(self.reguralizers.values()):
             losses[i] = reguralizer.loss(X, y, d).data[0]
         return losses
-    
+
     def set_loader(self, dataset, batch_size):
         self.loader = data.DataLoader(dataset, batch_size=batch_size, shuffle=True)
         for reguralizer, _ in self.reguralizers.values():
@@ -71,10 +64,10 @@ class Learner(nn.Module):
             y = Variable(y.long().cuda())
             d = Variable(d.long().cuda())
         return X, y, d
-    
+
     def predict_y(self, input_data):
         return self.M(self.E(input_data))
-    
+
     def evaluate(self, loader, nb_batch=None):
         """
         Evaluate model given data loader
@@ -91,11 +84,11 @@ class Learner(nn.Module):
             nb_batch = len(loader)
         self.eval()
         result = OrderedDict()
-        
+
         # evaluate main
         for k, v in iteritems(self._evaluate(loader, nb_batch)):
             result['{}-{}'.format('y', k)] = v
-        
+
         # evaluate reguralizer
         for name, (reguralizer, _) in iteritems(self.reguralizers):
             for k, v in iteritems(reguralizer._evaluate(loader, nb_batch)):
@@ -130,7 +123,7 @@ class Learner(nn.Module):
         result['f1macro'] = metrics.f1_score(y, pred_y, average='macro')
         result['loss'] = loss
         return result
-    
+
     def save(self, out, prefix=None):
         names = ['E.pth', 'M.pth']
         if prefix is not None:
