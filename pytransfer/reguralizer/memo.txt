@@ -1,0 +1,42 @@
+- Learnerが受け取るべきものは基本的には下記のみ
+
+1. 通常の分類モデル
+- 安全のため、Encoder: EとClassifier Mに分割しておく
+
+2. Learner自体のパラメータ
+例:DANの場合
+- DiscriminatorのConfiguration
+- alpha
+- 
+
+
+
+
+実装するLearnerのリスト
+- DAN (Domain Adversarial Networks)
+- RevGrad (DAN with gradient reversal layer)
+- CrossGrad 
+- APM (Attribute Perception Matching)
+
+
+コイツラは結局普通のLyに追加するロスなので、ロストして定義するのがいいかもしれない
+
+
+class Learner(nn.Module):
+  def __init__(self, E, M, dataset):
+    self.E = E
+    self.M = M
+    self.reguralizer_info = []
+    self.dataset = dataset
+
+  def add_reguralizer(self, reguralizer, weight, scheduler=None):
+    self.reguralizer.append((reguralizer, weight, scheduler))
+
+  def fit_loop(self):
+    for reguralizer, _, scheduler in self.reguralizer_info:
+      reguralizer.update()
+    
+    y_pred = ...
+    loss = y_loss
+    for reguralizer, weight, scheduler in self.reguralizer_info:
+      loss += weight * y_loss
