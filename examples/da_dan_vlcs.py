@@ -26,7 +26,7 @@ def prepare_datasets(source_domain, target_domain, ratio=0.8):
     target_dataset = VLCS(target_domain)
 
     train_source_dataset, valid_dataset = domain_wise_splits(source_dataset, ratio)
-    train_target_dataset, valid_dataset = domain_wise_splits(target_dataset, ratio)
+    train_target_dataset, test_dataset = domain_wise_splits(target_dataset, ratio)
     return train_source_dataset, valid_dataset, train_target_dataset, test_dataset
 
 
@@ -60,7 +60,7 @@ if __name__ == '__main__':
     print("Set reguralizer")
     discriminator_config = {
         "num_domains": 2, # Source & Target
-        "input_shape": E.output_shape(), 'hiddens': [E.output_shape()]}
+        "input_shape": E.output_shape(), 'hiddens': [E.output_shape()[1]]}
 
     reg = DADANReguralizer(learner=learner, discriminator_config=discriminator_config)
     reg_optimizer = RMSprop(filter(lambda p: p.requires_grad, reg.parameters()), lr=optim['lr'], alpha=0.9)
@@ -89,7 +89,7 @@ if __name__ == '__main__':
         valid_result = learner.evaluate(valid_loader, None)
         test_result = learner.evaluate(test_loader, None)
         external_result = da_check_invariance(
-            learner.E, train_source_dataset, train_target_dataset, 1000, lr=0.001, hiddens=[E.output_shape()], verbose=0)
+            learner.E, train_source_dataset, train_target_dataset, 1000, lr=0.001, hiddens=[E.output_shape()[1]], verbose=0)
         d_log = "domain d: %.4f || external: %.4f " % (valid_result['d-loss'], external_result['valid-domain-accuracy'])
 
         # HDivergence
