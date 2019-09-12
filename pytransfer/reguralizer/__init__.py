@@ -3,6 +3,7 @@ from collections import OrderedDict
 
 import numpy as np
 from sklearn import metrics
+import torch
 from torch import nn
 from torch.utils import data
 from torch.autograd import Variable
@@ -82,6 +83,8 @@ class _DAReguralizer(_Reguralizer):
         if as_variable:
             X_s = Variable(X_s.float().cuda())
             y_s = Variable(y_s.long().cuda())
-            X = Variable(torch.cat((X_s, X_t),0).float().cuda())
-            d = Variable(torch.cat((d_s, (d_t + 1)), 0).long().cuda())# target label
+            #X = Variable(torch.cat((X_s, X_t),0).float().cuda())
+            #d = Variable(torch.cat((d_s, (d_t + 1)), 0).long().cuda())# target label
+	    X = torch.cat((X_s.float().cuda(), X_t.float().cuda()),0)
+            d = torch.cat((Variable(d_s.long().cuda()), Valiable(d_t + 1).long().cuda()),0) # target label
         return X_s, y_s, X, d
