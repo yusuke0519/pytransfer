@@ -133,3 +133,45 @@ class Learner(nn.Module):
         for net, name in zip([self.E, self.M], names):
             torch.save(net.state_dict(), name)
         return names
+
+
+class DALearner(Learner):
+    def __init__(self, *args, **kwargs):
+        super(DALearner, self).__init__(*args, **kwargs)
+
+    def set_loader(self, source, target, batch_size):
+        self.source_loader = data.DataLoader(source, batch_size=batch_size, shuffle=True)
+        self.target_loader = data.DataLoader(target, batch_size=batch_size, shuffle=True)
+        for reguralizer, _ in self.reguralizers.values():
+            if reguralizer.loader is None:
+                reguralizer.set_loader(source, target, batch_size)
+        return self.source_loader, self.target_loader
+
+    def get_batch(self, as_variable=True):
+        assert self.source_loader is not None, "Please set loader before call this function"
+        X_s, y_s, d_s = self.source_loader.__iter__().__next__()
+        assert self.target_loader is not None, "Please set loader before call this function"
+        X_t, _, d_t = self.target_loader.__iter__().__next__()
+        if as_variable:
+            X_s = Variable(X_s.float().cuda())
+            y_s = Variable(y_s.long().cuda())
+            X = Variable(torch.cat((X_s, X_t),0).float().cuda())
+            d = Variable(torch.cat((d_s, (d_t + 1)), 0).long().cuda())# target label
+        return X_s, y_s, X, d
+
+    def loss(self, X_s, y_s, X, d):
+        yhat = self(X)
+        y_loss = self.criterion(yhat, y_s)
+        loss = y_loss
+        for reguralizer, alpha in self.reguralizers.values():
+            loss += alpha * reguralizer.loss(X_s, y_s, X, d)
+        return loss
+
+    def losses(self, X_s, y_s, X, d):
+        yhat = self(X)
+        y_loss = self.criterion(yhat, y_s)
+        losses = {}
+        losses['y'] = y_loss.data[0]
+        for i, (reguralizer, alpha) in enumerate(self.reguralizers.values()):
+            losses[i] = reguralizer.loss(X_s, y_s, X, d).data[0]
+        return losses

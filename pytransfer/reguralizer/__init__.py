@@ -64,3 +64,12 @@ class _Reguralizer(nn.Module):
         result['loss'] = loss
         self.train()
         return result
+
+class _DAReguralizer(_Reguralizer):
+    def __init__(self, *args, **kwargs):
+        super(_DAReguralizer, self).__init__(*args, **kwargs)
+    
+    def set_loader(self, source, target, batch_size):
+        self.source_loader = data.DataLoader(source, batch_size=batch_size, shuffle=True)
+        self.target_loader = data.DataLoader(target, batch_size=batch_size, shuffle=True)
+        return self.source_loader, self.target_loader

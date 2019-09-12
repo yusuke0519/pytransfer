@@ -2,7 +2,7 @@
 from torch import nn
 
 from pytransfer.reguralizer.utils import Discriminator
-from pytransfer.reguralizer import _Reguralizer
+from pytransfer.reguralizer import _Reguralizer, _DAReguralizer
 
 
 class DANReguralizer(_Reguralizer):
@@ -72,3 +72,12 @@ class DANReguralizer(_Reguralizer):
 
     def parameters(self):
         return self.D.parameters()
+
+class DADANReguralizer(_DAReguralizer):
+    def __init__(self, *args, **kwargs):
+        super(DADANReguralizer, self).__init__(*args, **kwargs)
+
+    def loss(self, X_s, y_s, X, d):
+        d_pred = self(X)
+        d_loss = self.criterion(d_pred, d)
+        return -1 * d_loss

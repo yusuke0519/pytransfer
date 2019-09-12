@@ -14,40 +14,20 @@ from torch.optim import RMSprop
 import torch.utils.data as data
 from pytransfer.datasets.base import Subset
 from pytransfer.datasets import VLCS
-from pytransfer.trainer import Learner
+from pytransfer.trainer import DALearner
 from vlcs_network import Encoder, Classifier
-from pytransfer.reguralizer.dan import DANReguralizer
-from exp_utils import check_invariance
+from pytransfer.reguralizer.dan import DADANReguralizer
+from exp_utils import da_check_invariance, domain_wise_splits
+#from tensorboardX import SummaryWriter
 
 
-def domain_wise_splits(dataset, split_size, random_seed=1234):
-    datasets1 = []
-    datasets2 = []
-    dataset_class = dataset.__class__
-    domain_keys = dataset.domain_keys
+def prepare_datasets(source_domain, target_domain, ratio=0.8):
+    source_dataset = VLCS(source_domain)
+    target_dataset = VLCS(target_domain)
 
-    for domain_key in domain_keys:
-        single_dataset = dataset.get_single_dataset(domain_key, **dataset.domain_specific_params())
-        len_dataset = len(single_dataset)
-        train_size = int(len_dataset * split_size)
-        indices = range(len_dataset)
-        random.shuffle(indices)
-        indices = torch.LongTensor(indices)
-        # indices2 = indices[train_size:]
-        dataset1, dataset2 = Subset(single_dataset, indices[:train_size]), Subset(single_dataset, indices[train_size:])
-        datasets1.append(dataset1)
-        datasets2.append(dataset2)
-
-    datasets1 = dataset_class(domain_keys=domain_keys, datasets=datasets1, **dataset.domain_specific_params())
-    datasets2 = dataset_class(domain_keys=domain_keys, datasets=datasets2, **dataset.domain_specific_params())
-    return datasets1, datasets2
-
-def prepare_datasets(source_domain, target_domain):
-    train_valid_dataset = VLCS(source_domain)
-    test_dataset = VLCS(target_domain)
-
-    train_dataset, valid_dataset = domain_wise_splits(train_valid_dataset, 0.8)
-    return train_dataset, valid_dataset, test_dataset
+    train_source_dataset, valid_dataset = domain_wise_splits(source_dataset, ratio)
+    train_target_dataset, valid_dataset = domain_wise_splits(target_dataset, ratio)
+    return train_source_dataset, valid_dataset, train_target_dataset, test_dataset
 
 
 if __name__ == '__main__':
@@ -55,12 +35,13 @@ if __name__ == '__main__':
     # Parameters
     source_domain = ['VOC2007'] # 'VOC2007', 'LabelMe', 'Caltech101', 'SUN09'
     target_domain = ['LabelMe']
-    optim = {'lr': 0.001, 'batch_size': 128, 'num_batch': 5000}
+    optim = {'lr': 0.001, 'batch_size': 64, 'num_batch': 5000}
     alpha = 1.0
 
     print("Load datasets")
-    train_dataset, valid_dataset, test_dataset = prepare_datasets(source_domain, target_domain)
-    print(len(train_dataset), len(valid_dataset), len(test_dataset))
+    train_source_dataset, valid_dataset, train_target_dataset, test_dataset = prepare_datasets(source_domain, target_domain, 0.8)
+    data_log = "source (%s) train : %d, valid %d| target (%s) train: %d, test %d" % (source_domain[0], len(train_source_dataset), len(valid_dataset), target_domain[0], len(train_target_dataset), len(test_dataset))
+    print(data_log)
     valid_loader = data.DataLoader(valid_dataset, batch_size=optim['batch_size'], shuffle=True)
     test_loader = data.DataLoader(test_dataset, batch_size=optim['batch_size'], shuffle=True)
 
@@ -71,45 +52,44 @@ if __name__ == '__main__':
 
     print(E)
     print(M)
-    learner = Learner(E, M).cuda()
+    learner = DALearner(E, M).cuda()
 
     optimizer = RMSprop(learner.parameters(), lr=optim['lr'], alpha=0.9)
     print(optimizer)
 
     print("Set reguralizer")
     discriminator_config = {
-        "num_domains": len(train_dataset.datasets),
+        "num_domains": 2, # Source & Target
         "input_shape": E.output_shape(), 'hiddens': [E.output_shape()]}
 
-    reg = DANReguralizer(learner=learner, discriminator_config=discriminator_config)
+    reg = DADANReguralizer(learner=learner, discriminator_config=discriminator_config)
     reg_optimizer = RMSprop(filter(lambda p: p.requires_grad, reg.parameters()), lr=optim['lr'], alpha=0.9)
     reg.set_optimizer(reg_optimizer)
 
     learner.add_reguralizer('d', reg, alpha)
+    #writer = SummaryWriter()
 
     print("Optimization")
     EVALUATE_PER = optim['num_batch'] / 20
     start_time = time.time()
 
-    # source(train, valid) # Target (train, test)
-    # TO DO
-    learner.set_loader(train_dataset, optim['batch_size'])
+    learner.set_loader(train_source_dataset, train_target_dataset, optim['batch_size'])
     for batch_idx in range(optim['num_batch']):
         learner.update_reguralizers()
         optimizer.zero_grad()
-        X, y, d = learner.get_batch()
-        loss = learner.loss(X, y, d)
+        X_s, y_s, X, d = learner.get_batch()
+        loss = learner.loss(X_s, y_s, X, d)
         loss.backward()
         optimizer.step()
-        learner.losses(X, y, d)
+        learner.losses(X_s, y_s, X, d)
         if (batch_idx+1) % EVALUATE_PER != 0:
             continue
         # train_result = evaluate(learner, train_loader, 100)
         elapse_train_time = time.time() - start_time
         valid_result = learner.evaluate(valid_loader, None)
         test_result = learner.evaluate(test_loader, None)
-        external_result = check_invariance(
-            learner.E, train_dataset, 1000, valid_dataset=valid_dataset, lr=0.001, hiddens=[800], verbose=0)
+        external_result = da_check_invariance(
+            learner.E, train_source_dataset, train_target_dataset, 1000, lr=0.001, hiddens=[E.output_shape()], verbose=0)
         d_log = "domain d: %.4f || external: %.4f " % (valid_result['d-loss'], external_result['valid-domain-accuracy'])
 
         # HDivergence
