@@ -111,7 +111,7 @@ class DADANReguralizer(_DAReguralizer):
         z = self.learner.E(X)
         return self.D(z)
 
-    def d_loss(self, X, y, d):
+    def d_loss(self, X_s, y_s, X, d):
         z = self.learner.E(X)
         d_pred = self.D(z)
         d_loss = self.criterion(d_pred, d)
@@ -123,8 +123,8 @@ class DADANReguralizer(_DAReguralizer):
 
         for _ in range(self.K):
             self.optimizer.zero_grad()
-            X, _, d = self.get_batch()
-            d_loss = self.d_loss(X, _, d)
+            _, _, X, d = self.get_batch()
+            d_loss = self.d_loss(_, _, X, d)
             d_loss.backward()
             self.optimizer.step()
 

@@ -73,3 +73,15 @@ class _DAReguralizer(_Reguralizer):
         self.source_loader = data.DataLoader(source, batch_size=batch_size, shuffle=True)
         self.target_loader = data.DataLoader(target, batch_size=batch_size, shuffle=True)
         return self.source_loader, self.target_loader
+
+    def get_batch(self, as_variable=True):
+        assert self.source_loader is not None, "Please set loader before call this function"
+        X_s, y_s, d_s = self.source_loader.__iter__().__next__()
+        assert self.target_loader is not None, "Please set loader before call this function"
+        X_t, _, d_t = self.target_loader.__iter__().__next__()
+        if as_variable:
+            X_s = Variable(X_s.float().cuda())
+            y_s = Variable(y_s.long().cuda())
+            X = Variable(torch.cat((X_s, X_t),0).float().cuda())
+            d = Variable(torch.cat((d_s, (d_t + 1)), 0).long().cuda())# target label
+        return X_s, y_s, X, d
