@@ -18,7 +18,7 @@ from pytransfer.trainer import DALearner
 from vlcs_network import Encoder, Classifier
 from pytransfer.reguralizer.dan import DADANReguralizer
 from exp_utils import da_check_invariance, domain_wise_splits
-#from tensorboardX import SummaryWriter
+from tensorboardX import SummaryWriter
 
 
 def prepare_datasets(source_domain, target_domain, ratio=0.8):
@@ -31,7 +31,7 @@ def prepare_datasets(source_domain, target_domain, ratio=0.8):
 
 
 if __name__ == '__main__':
-    print("Execute example")
+    print("Execute experiment")
     # Parameters
     source_domain = ['VOC2007'] # 'VOC2007', 'LabelMe', 'Caltech101', 'SUN09'
     target_domain = ['LabelMe']
@@ -67,7 +67,8 @@ if __name__ == '__main__':
     reg.set_optimizer(reg_optimizer)
 
     learner.add_reguralizer('d', reg, alpha)
-    #writer = SummaryWriter()
+    # log
+    writer = SummaryWriter()
 
     print("Optimization")
     EVALUATE_PER = optim['num_batch'] / 20
@@ -84,13 +85,12 @@ if __name__ == '__main__':
         learner.losses(X_s, y_s, X, d)
         if (batch_idx+1) % EVALUATE_PER != 0:
             continue
-        # train_result = evaluate(learner, train_loader, 100)
         elapse_train_time = time.time() - start_time
         valid_result = learner.evaluate(valid_loader, None)
         test_result = learner.evaluate(test_loader, None)
         external_result = da_check_invariance(
-            learner.E, train_source_dataset, train_target_dataset, 1000, lr=0.001, hiddens=[E.output_shape()[1]], verbose=0)
-        d_log = "domain d: %.4f || external: %.4f " % (valid_result['d-loss'], external_result['valid-domain-accuracy'])
+            learner.E, train_source_dataset, train_target_dataset, 1000, writer, batch_idx, lr=0.001, hiddens=[E.output_shape()[1]], verbose=0)
+        d_log = "valid domain loss: %.4f || external domain acc: %.4f " % (valid_result['d-loss'], external_result['valid-domain-accuracy'])
 
         # HDivergence
         elapsed_time1 = time.time() - start_time
@@ -99,5 +99,10 @@ if __name__ == '__main__':
         base_log = "%s [%06d, %d s (%d s, %d s)] || valid acc: %.3f, valid loss: %.4f|| test acc: %.3f, test loss: %.4f " % (
             "DAN", batch_idx+1, int(elapsed_time2), int(elapse_train_time), int(elapsed_time1), valid_result['y-accuracy'], valid_result['y-loss'], test_result['y-accuracy'], test_result['y-loss']) 
         print(base_log + ' || ' + d_log)
+        writer.add_scalar('c_loss/valid/%s' % source_domain[0], valid_result['y-loss'], batch_idx)
+        writer.add_scalar('c_acc/valid/%s' % source_domain[0], valid_result['y-accuracy'], batch_idx)
+        writer.add_scalar('c_loss/test/%s' % target_domain[0], test_result['y-accuracy'], batch_idx)
+        writer.add_scalar('c_acc/test/%s' % target_domain[0], test_result['y-loss'], batch_idx)
+        writer.add_scalar('check_invariance/acc', external_result['valid-domain-accuracy'], batch_idx)
 
         start_time = time.time()

@@ -103,9 +103,9 @@ def da_check_invariance(E, source, target, num_iterations, validation_size=0.5, 
         optimizer.zero_grad()
         X_s, _, d_s = train_source_loader.__iter__().__next__()
         X_t, _, d_t = train_target_loader.__iter__().__next__()
-        X = Variable(torch.cat((X_s, X_t),0).float().cuda(), volatile=True)
+        X = Variable(torch.cat((X_s.float(), X_t.float()), 0).cuda(), volatile=True)
         z = Variable(E(X).data)
-        d = Variable(torch.cat((d_s, (d_t + 1)), 0).long().cuda())# target label
+        d = Variable(torch.cat((d_s.long(), (d_t + 1).long()), 0).cuda())# target label
         d_pred = D(z)
         loss = criterion(d_pred, d)
 
@@ -130,7 +130,7 @@ def da_check_invariance(E, source, target, num_iterations, validation_size=0.5, 
         pred_d = np.argmax(pred_d.data.cpu(), axis=1)
         ds.append(d.numpy())
         pred_ds.append(pred_d.numpy())
-    
+
     for X, _, d in test_target_loader:
         X = Variable(X.float().cuda())
         pred_d = D(E(X))

@@ -153,10 +153,10 @@ class DALearner(Learner):
         assert self.target_loader is not None, "Please set loader before call this function"
         X_t, _, d_t = self.target_loader.__iter__().__next__()
         if as_variable:
+            X = Variable(torch.cat((X_s.float(), X_t.float()), 0).cuda())
             X_s = Variable(X_s.float().cuda())
             y_s = Variable(y_s.long().cuda())
-            X = Variable(torch.cat((X_s, X_t),0).float().cuda())
-            d = Variable(torch.cat((d_s, (d_t + 1)), 0).long().cuda())# target label
+            d = Variable(torch.cat((d_s.long(), (d_t + 1).long()), 0).cuda())# target label
         return X_s, y_s, X, d
 
     def loss(self, X_s, y_s, X, d):
