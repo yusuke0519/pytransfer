@@ -17,14 +17,15 @@ def check_invariance(E, dataset, num_iterations, valid_dataset, validation_size=
     test_loader = data.DataLoader(valid_dataset, batch_size=128, shuffle=False)
     optimizer = optim.RMSprop(D.parameters(), lr=lr, alpha=0.9)
     criterion = nn.NLLLoss()
-    # ===== train ===== 
+    activation = nn.LogSoftmax(dim=-1)
+    # ===== train =====
     for i in range(1, num_iterations+1):
         optimizer.zero_grad()
         X, _, d = train_loader.__iter__().__next__()
         X = Variable(X.float().cuda(), volatile=True)
         z = Variable(E(X).data)
         d = Variable(d.long().cuda())
-        d_pred = D(z)
+        d_pred = activation(D(z))
         loss = criterion(d_pred, d)
 
         loss.backward()

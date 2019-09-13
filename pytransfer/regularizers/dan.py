@@ -1,11 +1,9 @@
 # # -*- coding: utf-8 -*-
 from torch import nn
-
-from pytransfer.regularizers.utils import Discriminator
-from pytransfer.regularizers import _Reguralizer
+from pytransfer.regularizers import _DiscriminatorBasedReg
 
 
-class DANReguralizer(_Reguralizer):
+class DANReguralizer(_DiscriminatorBasedReg):
     """ Domain advesarial reguralization for learning invariant representations.
 
     This is a special case of MultipleDAN (num_discriminator=1 and KL_weight=0).
@@ -17,58 +15,20 @@ class DANReguralizer(_Reguralizer):
 
     """
 
-    def __init__(self, learner, D=None, discriminator_config=None, K=1):
-        """
-        Initialize dan base reguralizer
-
-        Parameter
-        ---------
-        learner : instance of Learner
-          TBA
-        discriminator_config : dict
-          configuration file for the discriminator
-        K : int
-          the # update of D in each iterations
-        """
-        super(DANReguralizer, self).__init__()
-
-        self.stop_update = D is not None  # if D is shared with others, then not update here
-        if D is None:
-            D = Discriminator(**discriminator_config)
-        self.D = D.cuda()
-        self.num_output = self.D.num_domains
-        # TODO: DANReguralizer should not assume that D has an attribute num_domain
-
-        self.learner = learner
-        self.K = K
-        self.criterion = nn.NLLLoss()
-        self.loader = None
-
-    def forward(self, X):
-        z = self.learner.E(X)
-        return self.D(z)
-
-    def loss(self, X, y, d):
-        d_pred = self(X)
+    def forward(self, X, y, d):
+        d_pred = self.predict(X)
         d_loss = self.criterion(d_pred, d)
         return -1 * d_loss
 
-    def d_loss(self, X, y, d):
+    def predict(self, X):
         z = self.learner.E(X)
-        d_pred = self.D(z)
+        pred = self.D(z)
+        return nn.LogSoftmax(dim=-1)(pred)
+
+    def loss(self, X, y, d):
+        d_pred = self.predict(X)
         d_loss = self.criterion(d_pred, d)
-        return d_loss
+        return -1 * d_loss
 
-    def update(self):
-        if self.stop_update:
-            return None
-
-        for _ in range(self.K):
-            self.optimizer.zero_grad()
-            X, _, d = self.get_batch()
-            d_loss = self.d_loss(X, _, d)
-            d_loss.backward()
-            self.optimizer.step()
-
-    def parameters(self):
-        return self.D.parameters()
+    def _D_loss(self, X, y, d):
+        return -1 * self(X, y, d)

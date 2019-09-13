@@ -37,7 +37,7 @@ class Learner(nn.Module):
         y_loss = self.criterion(yhat, y)
         loss = y_loss
         for reguralizer, alpha in self.reguralizers.values():
-            loss += alpha * reguralizer.loss(X, y, d)
+            loss += alpha * reguralizer(X, y, d)
         return loss
 
     def losses(self, X, y, d):
@@ -46,7 +46,7 @@ class Learner(nn.Module):
         losses = {}
         losses['y'] = y_loss.data[0]
         for i, (reguralizer, alpha) in enumerate(self.reguralizers.values()):
-            losses[i] = reguralizer.loss(X, y, d).data[0]
+            losses[i] = reguralizer(X, y, d).data[0]
         return losses
 
     def set_loader(self, dataset, batch_size):

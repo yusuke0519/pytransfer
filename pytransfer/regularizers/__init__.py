@@ -6,6 +6,7 @@ from sklearn import metrics
 from torch import nn
 from torch.utils import data
 from torch.autograd import Variable
+from pytransfer.regularizers.utils import Discriminator
 
 
 class _Reguralizer(nn.Module):
@@ -14,18 +15,17 @@ class _Reguralizer(nn.Module):
         return self.loader
 
     def get_batch(self, as_variable=True):
+        """ Get a batch of data
+
+        TODO: this function should be removed and the data should be specified outside of the class
+        """
         assert self.loader is not None, "Please set loader before call this function"
         X, y, d = self.loader.__iter__().__next__()
         if as_variable:
             X = Variable(X.float().cuda())
             y = Variable(y.long().cuda())
             d = Variable(d.long().cuda())
-        if hasattr(self.D, 'label_linear'):
-            X = [X, y]
         return X, y, d
-
-    def set_optimizer(self, optimizer):
-        self.optimizer = optimizer
 
     def _evaluate(self, loader, nb_batch):
         if nb_batch is None:
@@ -39,8 +39,8 @@ class _Reguralizer(nn.Module):
             target = Variable(d.long().cuda(), volatile=True)
             if len(np.unique(target.data.cpu())) <= 1:
                 continue
-            pred = self(X)
-            loss += self.loss(X, y, target).data[0]
+            pred = self.predict(X)
+            loss += self(X, y, target).data[0]
             pred = np.argmax(pred.data.cpu(), axis=1)
             targets.append(d.numpy())
             preds.append(pred.numpy())
@@ -62,14 +62,65 @@ class _Reguralizer(nn.Module):
         self.train()
         return result
 
-    def update(self):
-        """ Update the parameters of reguralization modules.
-
-        """
-        raise NotImplementedError()
-
     def forward(self, X, y, d):
         """ Returan reguralization loss.
 
+        Parameters
+        ----------
+        X : torch.FloatTensor
+        y : torch.LongTensor
+        d : torch.LongTensor
+
+        Returns
+        -------
+        loss : loss of the regularizer. The loss is minimized by trainer.
+
         """
         raise NotImplementedError()
+
+    def predict(self, X):
+        """ Predict with internal neural networks
+
+        Parameters
+        ----------
+        X : torch.FloatTensor
+        y : torch.LongTensor
+        d : torch.LongTensor
+        """
+        raise NotImplementedError()
+
+
+class _DiscriminatorBasedReg(_Reguralizer):
+    def __init__(self, learner, D=None, discriminator_config=None, K=1):
+        super(_DiscriminatorBasedReg, self).__init__()
+
+        self.stop_update = D is not None  # if D is shared with others, then not update here
+        if D is None:
+            D = Discriminator(**discriminator_config)
+        self.D = D.cuda()
+        self.num_output = self.D.num_domains
+
+        self.learner = learner
+        self.K = K
+        self.criterion = nn.NLLLoss()
+        self.loader = None
+
+    def set_optimizer(self, optimizer):
+        self.optimizer = optimizer
+
+    def _D_loss(self, X, y, d):
+        raise NotImplementedError()
+
+    def parameters(self):
+        return self.D.parameters()
+
+    def update(self):
+        if self.stop_update:
+            return None
+
+        for _ in range(self.K):
+            self.optimizer.zero_grad()
+            X, _, d = self.get_batch()
+            d_loss = self._D_loss(X, _, d)
+            d_loss.backward()
+            self.optimizer.step()

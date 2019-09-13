@@ -4,13 +4,8 @@ from torch import nn
 from torch.nn import Parameter
 
 
-def calc_acc(outputs, targets):
-    _, idxs = outputs.max(1)
-    return (idxs == targets).float().sum().data[0] / len(targets)
-
-
 class Discriminator(nn.Module):
-    def __init__(self, num_domains, input_shape, hiddens, sn=False, dropout=0.0, use_softmax=True, label_dim=None, bias=True):
+    def __init__(self, num_domains, input_shape, hiddens, sn=False, dropout=0.0, bias=True):
         super(Discriminator, self).__init__()
         self.num_domains = num_domains
         self.discriminator = get_classifier(hiddens, input_shape[1], dropout=dropout, sn=sn)
@@ -18,20 +13,8 @@ class Discriminator(nn.Module):
         if sn:
             module = SpectralNorm(module)
         self.linear = module
-        if label_dim is not None:
-            self.label_linear = nn.Linear(label_dim, num_domains)
-            self.onehot_converter = torch.sparse.torch.eye(label_dim)
-
-        if use_softmax:
-            self.activation = nn.LogSoftmax(dim=-1)
 
     def forward(self, input_data):
-        z = self.preactivation(input_data)
-        if hasattr(self, 'activation'):
-            z = self.activation(z)
-        return z
-
-    def preactivation(self, input_data):
         X = input_data
         z = self.discriminator(X)
         z = self.linear(z)
@@ -81,8 +64,8 @@ class SpectralNorm(nn.Module):
 
         height = w.data.shape[0]
         for _ in range(self.power_iterations):
-            v.data = l2normalize(torch.mv(torch.t(w.view(height,-1).data), u.data))
-            u.data = l2normalize(torch.mv(w.view(height,-1).data, v.data))
+            v.data = l2normalize(torch.mv(torch.t(w.view(height, -1).data), u.data))
+            u.data = l2normalize(torch.mv(w.view(height, -1).data, v.data))
 
         # sigma = torch.dot(u.data, torch.mv(w.view(height,-1).data, v.data))
         sigma = u.dot(w.view(height, -1).mv(v))
