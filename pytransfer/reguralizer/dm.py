@@ -7,11 +7,10 @@ import torch
 from torch import nn
 from torch.autograd import Variable
 from torch.utils import data
-from __init__ import DANReguralizer
-from dan import Discriminator
+from .dan import DANReguralizer
 
 
-class MovingAttributePerceptionLoss(DANReguralizer):
+class IIDM(DANReguralizer):
     """
     Calculating attribute perception loss
 
@@ -20,17 +19,16 @@ class MovingAttributePerceptionLoss(DANReguralizer):
     learner : instance of learner
 
     """
-    def __init__(self, learner, D=None, discriminator_config=None, distance='KL', decay=0.7, K=1):
-        super(MovingAttributePerceptionLoss, self).__init__(learner, discriminator_config=discriminator_config, K=K)
-        self.distance = distance
+    def __init__(self, learner, D=None, discriminator_config=None, decay=0.7, K=1):
+        super(IIDM, self).__init__(learner, discriminator_config=discriminator_config, K=K)
         self.decay = decay
         self.learner = learner
 
     def preprocess(self, dataset):
         self.initialize_centroids(dataset)
-    
+
     def set_loader(self, dataset, batch_size):
-        super(MovingAttributePerceptionLoss, self).set_loader(dataset, batch_size)
+        super(IIDM, self).set_loader(dataset, batch_size)
         self.preprocess(dataset)
         return self.loader
 
@@ -54,9 +52,9 @@ class MovingAttributePerceptionLoss(DANReguralizer):
         for j in range(num_domains):
             _filter = (d == j)
             new_centroid = z[_filter].mean(axis=0)
-            centroids[_filter] = new_centroid
+            centroids[j] = new_centroid
         self.centroids = centroids
-    
+
     def update_centroids(self, X, y, d):
         g = self.perceptual(self.learner.E(X))
         y = y.data.cpu()
@@ -99,6 +97,7 @@ class MovingAttributePerceptionLoss(DANReguralizer):
 
     def perceptual(self, z):
         return self.D.preactivation(z)
+
     def parameters(self):
         return self.D.parameters()
     
@@ -138,10 +137,10 @@ class MovingAttributePerceptionLoss(DANReguralizer):
         result['loss'] = loss
         self.train()
         return result
-    
+
     def update(self):
-	if self.stop_update:
-	    return None
+        if self.stop_update:
+            return None
 
         for _ in range(self.K):
             self.optimizer.zero_grad()
@@ -149,12 +148,12 @@ class MovingAttributePerceptionLoss(DANReguralizer):
             d_loss = self.d_loss(X, _, d)
             d_loss.backward()
             self.optimizer.step()
-    
+
         X, y, d = self.get_batch()
         self.update_centroids(X, y, d)
 
 
-class SemanticAlignedAttributePerceptionLoss(MovingAttributePerceptionLoss):
+class IIDMPlus(IIDM):
     """
     Calculating attribute perception loss
 
@@ -183,6 +182,7 @@ class SemanticAlignedAttributePerceptionLoss(MovingAttributePerceptionLoss):
         for i, j in itertools.product(range(num_classes), range(num_domains)):
             _filter = (y == i) & (d == j)
             new_centroid = z[_filter].mean(axis=0)
+            centroids[i, j] = new_centroid
         self.centroids = centroids
 
     def update_centroids(self, X, y, d):
@@ -194,7 +194,7 @@ class SemanticAlignedAttributePerceptionLoss(MovingAttributePerceptionLoss):
             if (_filter.numpy() == 1).sum() != 0:
                 new_centroid = g.data.cpu().numpy()[_filter.numpy() == 1].mean(axis=0)
                 self.centroids[i, j] = self.decay * self.centroids[i, j] + (1-self.decay) * new_centroid
-    
+
     def get_tgt_centroids(self, y, d, filter_mode):
         """Return target centroids with based on the touple of (y, d, filter_mode)
 

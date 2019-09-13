@@ -64,3 +64,15 @@ class _Reguralizer(nn.Module):
         result['loss'] = loss
         self.train()
         return result
+
+    def update(self):
+        """ Update the parameters of reguralization modules.
+
+        """
+        raise NotImplementedError()
+
+    def forward(self, X, y, d):
+        """ Returan reguralization loss.
+
+        """
+        raise NotImplementedError()
