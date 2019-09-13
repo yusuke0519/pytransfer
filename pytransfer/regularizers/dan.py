@@ -1,8 +1,8 @@
 # # -*- coding: utf-8 -*-
 from torch import nn
 
-from pytransfer.reguralizer.utils import Discriminator
-from pytransfer.reguralizer import _Reguralizer
+from pytransfer.regularizers.utils import Discriminator
+from pytransfer.regularizers import _Reguralizer
 
 
 class DANReguralizer(_Reguralizer):

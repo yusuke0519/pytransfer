@@ -16,7 +16,7 @@ from pytransfer.datasets.base import Subset
 from pytransfer.datasets import MNISTR
 from pytransfer.trainer import Learner
 from mnistr_network import Encoder, Classifier
-from pytransfer.reguralizer.dan import DANReguralizer
+from pytransfer.regularizers.dan import DANReguralizer
 from exp_utils import check_invariance
 
 

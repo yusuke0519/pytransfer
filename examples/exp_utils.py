@@ -5,7 +5,7 @@ from torch import nn, optim
 from torch.autograd import Variable
 import torch.utils.data as data
 
-from pytransfer.reguralizer.utils import Discriminator
+from pytransfer.regularizers.utils import Discriminator
 
 
 def check_invariance(E, dataset, num_iterations, valid_dataset, validation_size=0.5, batch_size=128, lr=0.001, verbose=1, hiddens=None):
