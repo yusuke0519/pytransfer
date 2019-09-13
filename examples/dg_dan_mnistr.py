@@ -52,6 +52,13 @@ def prepare_datasets(train_domain, test_domain):
 
 
 if __name__ == '__main__':
+    # Set random seed
+    _seed = 1234
+    random.seed(_seed)
+    torch.manual_seed(_seed)
+    torch.cuda.manual_seed(_seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
     print("Execute example")
     # Parameters
     train_domain = ['M0', 'M15', 'M30', 'M45', 'M60']
@@ -111,12 +118,10 @@ if __name__ == '__main__':
             learner.E, train_dataset, 1000, valid_dataset=valid_dataset, lr=0.001, hiddens=[800], verbose=0)
         d_log = "domain d: %.4f || external: %.4f " % (valid_result['d-loss'], external_result['valid-domain-accuracy'])
 
-        # HDivergence
-        elapsed_time1 = time.time() - start_time
-        elapsed_time2 = time.time() - start_time
-
-        base_log = "%s [%06d, %d s (%d s, %d s)] || valid acc: %.3f, valid loss: %.4f|| test acc: %.3f, test loss: %.4f " % (
-            "DAN", batch_idx+1, int(elapsed_time2), int(elapse_train_time), int(elapsed_time1), valid_result['y-accuracy'], valid_result['y-loss'], test_result['y-accuracy'], test_result['y-loss']) 
-        print(base_log + ' || ' + d_log)
+        log = "%s [%06d, s (%d s, %d s)] || valid acc: %.3f, valid loss: %.4f|| test acc: %.3f, test loss: %.4f " % (
+            "DAN", batch_idx+1, int(elapse_train_time), int(time.time()-start_time),
+            valid_result['y-accuracy'], valid_result['y-loss'], test_result['y-accuracy'], test_result['y-loss']
+        )
+        print(log + ' || ' + d_log)
 
         start_time = time.time()
