@@ -101,8 +101,8 @@ if __name__ == '__main__':
         print(base_log + ' || ' + d_log)
         writer.add_scalar('c_loss/valid/%s' % source_domain[0], valid_result['y-loss'], batch_idx)
         writer.add_scalar('c_acc/valid/%s' % source_domain[0], valid_result['y-accuracy'], batch_idx)
-        writer.add_scalar('c_loss/test/%s' % target_domain[0], test_result['y-accuracy'], batch_idx)
-        writer.add_scalar('c_acc/test/%s' % target_domain[0], test_result['y-loss'], batch_idx)
+        writer.add_scalar('c_loss/test/%s' % target_domain[0], test_result['y-loss'], batch_idx)
+        writer.add_scalar('c_acc/test/%s' % target_domain[0], test_result['y-accuracy'], batch_idx)
         writer.add_scalar('check_invariance/acc', external_result['valid-domain-accuracy'], batch_idx)
 
         start_time = time.time()
