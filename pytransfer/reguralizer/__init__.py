@@ -9,9 +9,6 @@ from torch.autograd import Variable
 
 
 class _Reguralizer(nn.Module):
-    def set_learner(self, learner):
-        self.learner = learner
-
     def set_loader(self, dataset, batch_size):
         self.loader = data.DataLoader(dataset, batch_size=batch_size, shuffle=True)
         return self.loader
