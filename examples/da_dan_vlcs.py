@@ -89,7 +89,7 @@ if __name__ == '__main__':
         valid_result = learner.evaluate(valid_loader, None)
         test_result = learner.evaluate(test_loader, None)
         external_result = da_check_invariance(
-            learner.E, train_source_dataset, train_target_dataset, 1000, writer, batch_idx, lr=0.001, hiddens=[E.output_shape()[1]], verbose=0)
+            learner.E, train_source_dataset, train_target_dataset, 1000, lr=0.001, hiddens=[E.output_shape()[1]], verbose=0)
         d_log = "valid domain loss: %.4f || external domain acc: %.4f " % (valid_result['d-loss'], external_result['valid-domain-accuracy'])
 
         # HDivergence
