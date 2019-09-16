@@ -28,39 +28,7 @@ class _Reguralizer(nn.Module):
         return X, y, d
 
     def _evaluate(self, loader, nb_batch):
-        if nb_batch is None:
-            nb_batch = len(loader)
-        self.eval()
-        targets = []
-        preds = []
-        loss = 0
-        for i, (X, y, d) in enumerate(loader):
-            X = Variable(X.float().cuda(), volatile=True)
-            target = Variable(d.long().cuda(), volatile=True)
-            if len(np.unique(target.data.cpu())) <= 1:
-                continue
-            pred = self.predict(X)
-            loss += self(X, y, target).data[0]
-            pred = np.argmax(pred.data.cpu(), axis=1)
-            targets.append(d.numpy())
-            preds.append(pred.numpy())
-            if i+1 == nb_batch:
-                break
-        loss /= nb_batch
-
-        result = OrderedDict()
-        if len(targets) == 0:
-            result['accuracy'] = np.nan
-            result['f1macro'] = np.nan
-            result['loss'] = np.nan
-            return result
-        target = np.concatenate(targets)
-        pred = np.concatenate(preds)
-        result['accuracy'] = metrics.accuracy_score(target, pred)
-        result['f1macro'] = metrics.f1_score(target, pred, average='macro')
-        result['loss'] = loss
-        self.train()
-        return result
+        raise NotImplementedError()
 
     def forward(self, X, y, d):
         """ Returan reguralization loss.
@@ -124,3 +92,39 @@ class _DiscriminatorBasedReg(_Reguralizer):
             d_loss = self._D_loss(X, _, d)
             d_loss.backward()
             self.optimizer.step()
+
+    def _evaluate(self, loader, nb_batch):
+        if nb_batch is None:
+            nb_batch = len(loader)
+        self.eval()
+        targets = []
+        preds = []
+        loss = 0
+        for i, (X, y, d) in enumerate(loader):
+            X = Variable(X.float().cuda(), volatile=True)
+            y = Variable(y.long().cuda(), volatile=True)
+            target = Variable(d.long().cuda(), volatile=True)
+            if len(np.unique(target.data.cpu())) <= 1:
+                continue
+            pred = self.predict(X)
+            loss += self(X, y, target).data[0]
+            pred = np.argmax(pred.data.cpu(), axis=1)
+            targets.append(d.numpy())
+            preds.append(pred.numpy())
+            if i+1 == nb_batch:
+                break
+        loss /= nb_batch
+
+        result = OrderedDict()
+        if len(targets) == 0:
+            result['accuracy'] = np.nan
+            result['f1macro'] = np.nan
+            result['loss'] = np.nan
+            return result
+        target = np.concatenate(targets)
+        pred = np.concatenate(preds)
+        result['accuracy'] = metrics.accuracy_score(target, pred)
+        result['f1macro'] = metrics.f1_score(target, pred, average='macro')
+        result['loss'] = loss
+        self.train()
+        return result

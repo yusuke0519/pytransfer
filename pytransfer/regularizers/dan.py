@@ -25,10 +25,5 @@ class DANReguralizer(_DiscriminatorBasedReg):
         pred = self.D(z)
         return nn.LogSoftmax(dim=-1)(pred)
 
-    def loss(self, X, y, d):
-        d_pred = self.predict(X)
-        d_loss = self.criterion(d_pred, d)
-        return -1 * d_loss
-
     def _D_loss(self, X, y, d):
         return -1 * self(X, y, d)

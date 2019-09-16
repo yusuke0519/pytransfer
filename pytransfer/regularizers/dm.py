@@ -1,62 +1,68 @@
 # # -*- coding: utf-8 -*-
 import itertools
-from collections import OrderedDict
 import numpy as np
-from sklearn import metrics
 import torch
 from torch import nn
 from torch.autograd import Variable
 from torch.utils import data
-from .dan import DANReguralizer
+from . import _DiscriminatorBasedReg
 
 
-class IIDM(DANReguralizer):
-    """
-    Calculating attribute perception loss
+def initialize_centroids(dataset, func=None, batch_size=4096):
+    if func is None:
+        func = lambda x: x
 
-    Parameters
-    ----------
-    learner : instance of learner
+    z_list, y_list, d_list = [], [], []
+    for X, y, d in data.DataLoader(dataset, batch_size=batch_size):
+        z = func(Variable(X.float().cuda(), volatile=True))
+        z_list.append(z.data.cpu().numpy())
+        y_list.append(y.numpy())
+        d_list.append(d.numpy())
+    z = np.concatenate(z_list)
+    y = np.concatenate(y_list)
+    d = np.concatenate(d_list)
+
+    num_domains = len(dataset.domain_keys)
+    centroids = np.zeros((num_domains, z.shape[1]))
+    for j in range(num_domains):
+        _filter = (d == j)
+        new_centroid = z[_filter].mean(axis=0)
+        centroids[j] = new_centroid
+    return centroids
+
+
+class IIDM(_DiscriminatorBasedReg):
+    """Calculating discriminator matching loss
+
 
     """
     def __init__(self, learner, D=None, discriminator_config=None, decay=0.7, K=1):
         super(IIDM, self).__init__(learner, discriminator_config=discriminator_config, K=K)
         self.decay = decay
         self.learner = learner
-
-    def preprocess(self, dataset):
-        self.initialize_centroids(dataset)
+        self.e_criterion = nn.KLDivLoss(reduce=False)
 
     def set_loader(self, dataset, batch_size):
         super(IIDM, self).set_loader(dataset, batch_size)
-        self.preprocess(dataset)
-        return self.loader
-
-    def initialize_centroids(self, dataset, batch_size=4096):
-        z_list, y_list, d_list = [], [], []
-        for X, y, d in data.DataLoader(dataset, batch_size=batch_size):
-            z = self.perceptual(self.learner.E(Variable(X.float().cuda(), volatile=True)))
-            z_list.append(z.data.cpu().numpy())
-            y_list.append(y.numpy())
-            d_list.append(d.numpy())
-        z = np.concatenate(z_list)
-        y = np.concatenate(y_list)
-        d = np.concatenate(d_list)
-
+        self.centroids = initialize_centroids(
+            dataset, lambda x: self.D(self.learner.E(x)))
         num_classes = dataset.get('num_classes')
         num_domains = len(dataset.domain_keys)
         self.num_classes = num_classes
         self.num_domains = num_domains
+        return self.loader
 
-        centroids = np.zeros((num_domains, z.shape[1]))
-        for j in range(num_domains):
-            _filter = (d == j)
-            new_centroid = z[_filter].mean(axis=0)
-            centroids[j] = new_centroid
-        self.centroids = centroids
+    def predict(self, X):
+        z = self.learner.E(X)
+        pred = self.D(z)
+        return nn.LogSoftmax(dim=-1)(pred)
+
+    def _D_loss(self, X, y, d):
+        d_pred = self.predict(X)
+        return self.criterion(d_pred, d)
 
     def update_centroids(self, X, y, d):
-        g = self.perceptual(self.learner.E(X))
+        g = self.D(self.learner.E(X))
         y = y.data.cpu()
         d = d.data.cpu()
         for j in np.unique(d):
@@ -81,74 +87,15 @@ class IIDM(DANReguralizer):
         batch_size, _, g_size = tgt_centroids.shape
         return torch.from_numpy(tgt_centroids.reshape(batch_size, -1, g_size))
 
-    def forward(self, z, y, d):
-        g = self.perceptual(z)
+    def forward(self, X, y, d):
+        z = self.learner.E(X)
+        g = self.D(z)
         p_tgt = Variable(self.get_tgt_centroids(y, d, 'n')).float().cuda()
         g_log_softmax_repeat = torch.transpose(nn.functional.log_softmax(g, dim=-1).repeat(p_tgt.shape[1], 1, 1), 0, 1)
         return self.e_criterion(g_log_softmax_repeat, nn.functional.softmax(p_tgt, dim=-1)).sum(dim=-1).mean()
 
-    @property
-    def e_criterion(self):
-        return nn.KLDivLoss(reduce=False)
-
-    def loss(self, X, y, d):
-        z = self.learner.E(X)
-        return self(z, y, d)
-
-    def perceptual(self, z):
-        return self.D.preactivation(z)
-
-    def parameters(self):
-        return self.D.parameters()
-    
-    def _evaluate(self, loader, nb_batch):
-        if nb_batch is None:
-            nb_batch = len(loader)
-        self.eval()
-        targets = []
-        preds = []
-        loss = 0
-        for i, (X, y, d) in enumerate(loader):
-            X = Variable(X.float().cuda(), volatile=True)
-            y_target = Variable(y.long().cuda(), volatile=True)
-            target = Variable(d.long().cuda(), volatile=True)
-            if len(np.unique(target.data.cpu())) <= 1:
-                continue
-            z = self.learner.E(X)
-            pred = self.D(z)
-            loss += self.loss(X, y_target, target).data[0]
-            pred = np.argmax(pred.data.cpu(), axis=1)
-            targets.append(d.numpy())
-            preds.append(pred.numpy())
-            if i+1 == nb_batch:
-                break
-        loss /= nb_batch
-
-        result = OrderedDict()
-        if len(targets) == 0:
-            result['accuracy'] = np.nan
-            result['f1macro'] = np.nan
-            result['loss'] = np.nan
-            return result
-        target = np.concatenate(targets)
-        pred = np.concatenate(preds)
-        result['accuracy'] = metrics.accuracy_score(target, pred)
-        result['f1macro'] = metrics.f1_score(target, pred, average='macro')
-        result['loss'] = loss
-        self.train()
-        return result
-
     def update(self):
-        if self.stop_update:
-            return None
-
-        for _ in range(self.K):
-            self.optimizer.zero_grad()
-            X, _, d = self.get_batch()
-            d_loss = self.d_loss(X, _, d)
-            d_loss.backward()
-            self.optimizer.step()
-
+        super(IIDM, self).update()
         X, y, d = self.get_batch()
         self.update_centroids(X, y, d)
 
