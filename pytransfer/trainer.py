@@ -177,3 +177,32 @@ class DALearner(Learner):
             #losses[i] = reguralizer.loss(X_s, y_s, X, d).data[0]
             losses[i] = reguralizer.loss(X, y_s, d).data[0]
         return losses
+
+    def evaluate(self, loader, nb_batch=None, source=True):
+        """
+        Evaluate model given data loader
+
+        Parameter
+        ---------
+        nb_batch : int (default: None)
+          # batch to calculate the loss and accuracy
+        loader : DataLoader
+          data loader
+
+        """
+        if nb_batch is None:
+            nb_batch = len(loader)
+        self.eval()
+        result = OrderedDict()
+
+        # evaluate main
+        for k, v in iteritems(self._evaluate(loader, nb_batch)):
+            result['{}-{}'.format('y', k)] = v
+
+        # evaluate reguralizer
+        for name, (reguralizer, _) in iteritems(self.reguralizers):
+            for k, v in iteritems(reguralizer._evaluate(loader, nb_batch, source)):
+                result['{}-{}'.format(name, k)] = v
+
+        self.train()
+        return result

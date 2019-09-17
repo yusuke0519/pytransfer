@@ -86,3 +86,41 @@ class _DAReguralizer(_Reguralizer):
             y_s = Variable(y_s.long().cuda())
             d = Variable(torch.cat((d_s.long(), (d_t + 1).long()), 0).cuda()) # target label
         return X_s, y_s, X, d
+
+    def _evaluate(self, loader, nb_batch, source=True):
+        if nb_batch is None:
+            nb_batch = len(loader)
+        self.eval()
+        targets = []
+        preds = []
+        loss = 0
+        for i, (X, y, d) in enumerate(loader):
+            X = Variable(X.float().cuda(), volatile=True)
+            if not source:
+                target = Variable((d+1).long().cuda(), volatile=True)
+            else:
+                target = Variable(d.long().cuda(), volatile=True)
+            if len(np.unique(target.data.cpu())) <= 1:
+                continue
+            pred = self(X)
+            loss += self.loss(X, y, target).data[0]
+            pred = np.argmax(pred.data.cpu(), axis=1)
+            targets.append(d.numpy())
+            preds.append(pred.numpy())
+            if i+1 == nb_batch:
+                break
+        loss /= nb_batch
+
+        result = OrderedDict()
+        if len(targets) == 0:
+            result['accuracy'] = np.nan
+            result['f1macro'] = np.nan
+            result['loss'] = np.nan
+            return result
+        target = np.concatenate(targets)
+        pred = np.concatenate(preds)
+        result['accuracy'] = metrics.accuracy_score(target, pred)
+        result['f1macro'] = metrics.f1_score(target, pred, average='macro')
+        result['loss'] = loss
+        self.train()
+        return result

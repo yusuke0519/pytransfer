@@ -87,8 +87,8 @@ if __name__ == '__main__':
         if (batch_idx+1) % EVALUATE_PER != 0:
             continue
         elapse_train_time = time.time() - start_time
-        valid_result = learner.evaluate(valid_loader, None)
-        test_result = learner.evaluate(test_loader, None)
+        valid_result = learner.evaluate(valid_loader, None, True)
+        test_result = learner.evaluate(test_loader, None, False)
         external_result = da_check_invariance(
             learner.E, train_source_dataset, train_target_dataset, 1000, lr=0.001, hiddens=[E.output_shape()[1]], verbose=0)
         d_log = "valid domain loss: %.4f || external domain acc: %.4f " % (valid_result['d-loss'], external_result['valid-domain-accuracy'])
