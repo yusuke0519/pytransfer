@@ -62,8 +62,8 @@ if __name__ == '__main__':
         "num_domains": 2, # Source & Target
         "input_shape": E.output_shape(), 'hiddens': [E.output_shape()[1]]}
 
-    #reg = DADANReguralizer(learner=learner, discriminator_config=discriminator_config)
-    reg = DANReguralizer(learner=learner, discriminator_config=discriminator_config)
+    reg = DADANReguralizer(learner=learner, discriminator_config=discriminator_config)
+    #reg = DANReguralizer(learner=learner, discriminator_config=discriminator_config)
     reg_optimizer = RMSprop(filter(lambda p: p.requires_grad, reg.parameters()), lr=optim['lr'], alpha=0.9)
     reg.set_optimizer(reg_optimizer)
 
