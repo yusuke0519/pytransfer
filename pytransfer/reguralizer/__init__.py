@@ -100,8 +100,6 @@ class _DAReguralizer(_Reguralizer):
                 target = Variable((d + 1).long().cuda(), volatile=True)
             else:
                 target = Variable(d.long().cuda(), volatile=True)
-            #if len(np.unique(target.data.cpu())) <= 1:
-                #continue
             pred = self(X)
             loss += self.loss(X, y, X, target).data[0]
             pred = np.argmax(pred.data.cpu(), axis=1)
