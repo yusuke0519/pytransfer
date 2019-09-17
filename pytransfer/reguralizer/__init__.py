@@ -100,18 +100,16 @@ class _DAReguralizer(_Reguralizer):
                 target = Variable((d + 1).long().cuda(), volatile=True)
             else:
                 target = Variable(d.long().cuda(), volatile=True)
-            if len(np.unique(target.data.cpu())) <= 1:
-                continue
+            #if len(np.unique(target.data.cpu())) <= 1:
+                #continue
             pred = self(X)
-            #loss += self.loss(X, y, target).data[0]
-            loss += self.loss(_, _, X, target).data[0]
+            loss += self.loss(X, y, X, target).data[0]
             pred = np.argmax(pred.data.cpu(), axis=1)
             targets.append(d.numpy())
             preds.append(pred.numpy())
             if i+1 == nb_batch:
                 break
         loss /= nb_batch
-
         result = OrderedDict()
         if len(targets) == 0:
             result['accuracy'] = np.nan

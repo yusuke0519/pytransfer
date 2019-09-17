@@ -36,8 +36,8 @@ if __name__ == '__main__':
     source_domain = ['V'] # 'V', 'L', 'C', 'S'
     target_domain = ['L']
     optim = {'lr': 0.001, 'batch_size': 64, 'num_batch': 5000}
-    #alpha = 1.0
-    alpha = 0
+    alpha = 1.0
+    #alpha = 0
 
     print("Load datasets")
     train_source_dataset, valid_dataset, train_target_dataset, test_dataset = prepare_datasets(source_domain, target_domain, 0.8)
@@ -93,8 +93,8 @@ if __name__ == '__main__':
         external_result = da_check_invariance(
             learner.E, train_source_dataset, train_target_dataset, 1000, lr=0.001, hiddens=[E.output_shape()[1]], verbose=0)
         d_log = "valid domain loss: %.4f || external domain acc: %.4f " % (valid_result['d-loss'], external_result['valid-domain-accuracy'])
-
         # HDivergence
+
         elapsed_time1 = time.time() - start_time
         elapsed_time2 = time.time() - start_time
 
