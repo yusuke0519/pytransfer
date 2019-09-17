@@ -16,7 +16,7 @@ from pytransfer.datasets.base import Subset
 from pytransfer.datasets import VLCS
 from pytransfer.trainer import DALearner
 from vlcs_network import Encoder, Classifier
-from pytransfer.reguralizer.dan import DADANReguralizer
+from pytransfer.reguralizer.dan import DADANReguralizer, DANReguralizer
 from exp_utils import da_check_invariance, domain_wise_splits
 from tensorboardX import SummaryWriter
 
@@ -33,8 +33,8 @@ def prepare_datasets(source_domain, target_domain, ratio=0.8):
 if __name__ == '__main__':
     print("Execute experiment")
     # Parameters
-    source_domain = ['VOC2007'] # 'VOC2007', 'LabelMe', 'Caltech101', 'SUN09'
-    target_domain = ['LabelMe']
+    source_domain = ['V'] # 'V', 'L', 'C', 'S'
+    target_domain = ['L']
     optim = {'lr': 0.001, 'batch_size': 64, 'num_batch': 5000}
     alpha = 1.0
 
@@ -62,7 +62,8 @@ if __name__ == '__main__':
         "num_domains": 2, # Source & Target
         "input_shape": E.output_shape(), 'hiddens': [E.output_shape()[1]]}
 
-    reg = DADANReguralizer(learner=learner, discriminator_config=discriminator_config)
+    #reg = DADANReguralizer(learner=learner, discriminator_config=discriminator_config)
+    reg = DANReguralizer(learner=learner, discriminator_config=discriminator_config)
     reg_optimizer = RMSprop(filter(lambda p: p.requires_grad, reg.parameters()), lr=optim['lr'], alpha=0.9)
     reg.set_optimizer(reg_optimizer)
 
