@@ -17,7 +17,7 @@ from pytransfer.datasets import VLCS
 from pytransfer.trainer import DALearner
 from vlcs_network import Encoder, Classifier
 from pytransfer.reguralizer.dan import DANReguralizer
-from exp_utils import da_check_invariance, domain_wise_splits
+from exp_utils import check_invariance, domain_wise_splits
 from tensorboardX import SummaryWriter
 
 
@@ -37,17 +37,17 @@ if __name__ == '__main__':
     alpha = 1.0
 
     print("Load datasets")
-    train_dataset, test_valid_dataset = prepare_datasets(source, target, 0.8)
+    train_dataset, valid_test_dataset = prepare_datasets(source, target, 0.8)
     train_source_size = train_dataset.cummulative_sizes[0]
-    valid_size = test_valid_dataset.cummulative_sizes[0]
+    valid_size = valid_test_dataset.cummulative_sizes[0]
     train_target_size = train_dataset.cummulative_sizes[1] - train_source_size
-    test_size = test_valid_dataset.cummulative_sizes[1] - valid_size
+    test_size = valid_test_dataset.cummulative_sizes[1] - valid_size
     data_log = "source (%s) train : %d, valid %d| target (%s) train: %d, test %d" % (source, train_source_size, valid_size, target, train_target_size, test_size)
     print(data_log)
     valid_sampler = data.sampler.SubsetRandomSampler([i for i in range(0, valid_size)]) 
-    test_sampler = data.sampler.SubsetRandomSampler([i for i in range(valid_size, test_valid_dataset.cummulative_sizes[1])])
-    valid_loader = data.DataLoader(valid_dataset, batch_size=optim['batch_size'], shuffle=True, sampler=valid_sampler)
-    test_loader = data.DataLoader(test_dataset, batch_size=optim['batch_size'], shuffle=True, sampler=test_sampler)
+    test_sampler = data.sampler.SubsetRandomSampler([i for i in range(valid_size, valid_test_dataset.cummulative_sizes[1])])
+    valid_loader = data.DataLoader(valid_test_dataset, batch_size=optim['batch_size'], shuffle=True, sampler=valid_sampler)
+    test_loader = data.DataLoader(valid_test_dataset, batch_size=optim['batch_size'], shuffle=True, sampler=test_sampler)
 
     print("Build model...")
     E = Encoder(VLCS.get('input_shape'))
