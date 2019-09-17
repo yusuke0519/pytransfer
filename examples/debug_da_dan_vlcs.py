@@ -40,14 +40,14 @@ if __name__ == '__main__':
     train_dataset, test_valid_dataset = prepare_datasets(source, target, 0.8)
     train_source_size = train_dataset.cummulative_sizes[0]
     valid_size = test_valid_dataset.cummulative_sizes[0]
-    train_target_size = train_dataset.cummulative_sizes[1]
-    test_size = test_valid_dataset.cummulative_sizes[1]
+    train_target_size = train_dataset.cummulative_sizes[1] - train_source_size
+    test_size = test_valid_dataset.cummulative_sizes[1] - valid_size
     data_log = "source (%s) train : %d, valid %d| target (%s) train: %d, test %d" % (source, train_source_size, valid_size, target, train_target_size, test_size)
     print(data_log)
-    print(train_dataset.dataset)
-    print(test_valid_dataset.dataset)
-    valid_loader = data.DataLoader(valid_dataset, batch_size=optim['batch_size'], shuffle=True)
-    test_loader = data.DataLoader(test_dataset, batch_size=optim['batch_size'], shuffle=True)
+    valid_sampler = data.sampler.SubsetRandomSampler([i for i in range(0, valid_size)]) 
+    test_sampler = data.sampler.SubsetRandomSampler([i for i in range(valid_size, test_valid_dataset.cummulative_sizes[1])])
+    valid_loader = data.DataLoader(valid_dataset, batch_size=optim['batch_size'], shuffle=True, sampler=valid_sampler)
+    test_loader = data.DataLoader(test_dataset, batch_size=optim['batch_size'], shuffle=True, sampler=test_sampler)
 
     print("Build model...")
     E = Encoder(VLCS.get('input_shape'))
@@ -78,7 +78,7 @@ if __name__ == '__main__':
     EVALUATE_PER = optim['num_batch'] / 20
     start_time = time.time()
 
-    learner.set_loader(train_source_dataset, train_target_dataset, optim['batch_size'])
+    learner.set_loader(train_dataset, optim['batch_size'])
     for batch_idx in range(optim['num_batch']):
         learner.update_reguralizers()
         optimizer.zero_grad()
