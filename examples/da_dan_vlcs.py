@@ -36,7 +36,8 @@ if __name__ == '__main__':
     source_domain = ['V'] # 'V', 'L', 'C', 'S'
     target_domain = ['L']
     optim = {'lr': 0.001, 'batch_size': 64, 'num_batch': 5000}
-    alpha = 1.0
+    #alpha = 1.0
+    alpha = 0
 
     print("Load datasets")
     train_source_dataset, valid_dataset, train_target_dataset, test_dataset = prepare_datasets(source_domain, target_domain, 0.8)

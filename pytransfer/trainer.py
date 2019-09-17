@@ -164,8 +164,8 @@ class DALearner(Learner):
         y_loss = self.criterion(yhat, y_s)
         loss = y_loss
         for reguralizer, alpha in self.reguralizers.values():
-            #loss += alpha * reguralizer.loss(X_s, y_s, X, d)
-            loss += alpha * reguralizer.loss(X, y_s, d)
+            loss += alpha * reguralizer.loss(_, _, X, d)
+            #loss += alpha * reguralizer.loss(X, _, d)
         return loss
 
     def losses(self, X_s, y_s, X, d):
@@ -174,8 +174,8 @@ class DALearner(Learner):
         losses = {}
         losses['y'] = y_loss.data[0]
         for i, (reguralizer, alpha) in enumerate(self.reguralizers.values()):
-            #losses[i] = reguralizer.loss(X_s, y_s, X, d).data[0]
-            losses[i] = reguralizer.loss(X, y_s, d).data[0]
+            losses[i] = reguralizer.loss(_, _, X, d).data[0]
+            #losses[i] = reguralizer.loss(X, _, d).data[0]
         return losses
 
     def evaluate(self, loader, nb_batch=None, source=True):
