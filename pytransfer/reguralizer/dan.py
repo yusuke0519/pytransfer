@@ -36,6 +36,7 @@ class DANReguralizer(_Reguralizer):
         if D is None:
             D = Discriminator(**discriminator_config)
         self.D = D.cuda()
+        print(self.D)
         self.num_output = self.D.num_domains
         # TODO: DANReguralizer should not assume that D has an attribute num_domain
 

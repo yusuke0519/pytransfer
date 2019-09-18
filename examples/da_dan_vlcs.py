@@ -10,7 +10,7 @@ Reference: TODO
 import time
 import random
 import torch
-from torch.optim import RMSprop
+from torch.optim import RMSprop, Adam
 import torch.utils.data as data
 from pytransfer.datasets.base import Subset
 from pytransfer.datasets import VLCS
@@ -33,13 +33,16 @@ if __name__ == '__main__':
     # Parameters
     source = 'V' # 'V', 'L', 'C', 'S'
     target = 'L'
-    optim = {'lr': 0.001, 'batch_size': 64, 'num_batch': 5000}
+    optim = {'lr': 0.001, 'batch_size': 128, 'num_batch': 5000}
+    # Domain Generalization with Adversarial Feature Learning [Li+ 2018]
+    # optim = {'lr': 1e-4, 'batch_size': 100, 'num_batch': 5000}
     alpha = 1.0
+    split_ratio = 0.7
     # log
     tbx = False
 
     print("Load datasets")
-    train_dataset, valid_test_dataset = prepare_datasets(source, target, 0.8)
+    train_dataset, valid_test_dataset = prepare_datasets(source, target, split_ratio)
     train_source_size = train_dataset.cummulative_sizes[0]
     valid_size = valid_test_dataset.cummulative_sizes[0]
     train_target_size = train_dataset.cummulative_sizes[1] - train_source_size
@@ -60,8 +63,9 @@ if __name__ == '__main__':
     print(E)
     print(M)
     learner = DALearner(E, M).cuda()
-
     optimizer = RMSprop(learner.parameters(), lr=optim['lr'], alpha=0.9)
+    # Domain Generalization with Adversarial Feature Learning [Li+ 2018]
+    # optimizer = Adam(learner.parameters(), lr=optim['lr'])
     print(optimizer)
 
     print("Set reguralizer")
@@ -71,6 +75,8 @@ if __name__ == '__main__':
 
     reg = DANReguralizer(learner=learner, discriminator_config=discriminator_config)
     reg_optimizer = RMSprop(filter(lambda p: p.requires_grad, reg.parameters()), lr=optim['lr'], alpha=0.9)
+    # Domain Generalization with Adversarial Feature Learning [Li+ 2018]
+    # reg_optimizer = Adam(filter(lambda p: p.requires_grad, reg.parameters()), lr=optim['lr'])
     reg.set_optimizer(reg_optimizer)
 
     learner.add_reguralizer('d', reg, alpha)
@@ -108,10 +114,10 @@ if __name__ == '__main__':
             "DAN", batch_idx+1, int(elapsed_time2), int(elapse_train_time), int(elapsed_time1), valid_result['y-accuracy'], valid_result['y-loss'], test_result['y-accuracy'], test_result['y-loss']) 
         print(base_log + ' || ' + d_log)
         if tbx :
-            writer.add_scalar('c_loss/valid/%s' % source_domain[0], valid_result['y-loss'], batch_idx)
-            writer.add_scalar('c_acc/valid/%s' % source_domain[0], valid_result['y-accuracy'], batch_idx)
-            writer.add_scalar('c_loss/test/%s' % target_domain[0], test_result['y-loss'], batch_idx)
-            writer.add_scalar('c_acc/test/%s' % target_domain[0], test_result['y-accuracy'], batch_idx)
+            writer.add_scalar('c_loss/valid/%s' % source, valid_result['y-loss'], batch_idx)
+            writer.add_scalar('c_acc/valid/%s' % source, valid_result['y-accuracy'], batch_idx)
+            writer.add_scalar('c_loss/test/%s' % target, test_result['y-loss'], batch_idx)
+            writer.add_scalar('c_acc/test/%s' % target, test_result['y-accuracy'], batch_idx)
             writer.add_scalar('check_invariance/acc', external_result['valid-domain-accuracy'], batch_idx)
 
         start_time = time.time()
