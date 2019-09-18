@@ -17,7 +17,7 @@ from pytransfer.datasets import VLCS
 from pytransfer.trainer import DALearner
 from vlcs_network import Encoder, Classifier
 from pytransfer.reguralizer.dan import DANReguralizer
-from exp_utils import check_invariance, domain_wise_splits
+from exp_utils import da_check_invariance, domain_wise_splits
 from tensorboardX import SummaryWriter
 
 
@@ -47,8 +47,8 @@ if __name__ == '__main__':
     valid_sampler = data.sampler.SubsetRandomSampler([i for i in range(0, valid_size)])
     test_sampler = data.sampler.SubsetRandomSampler([i for i in range(valid_size, valid_test_dataset.cummulative_sizes[1])])
     source_sampler = data.sampler.SubsetRandomSampler([i for i in range(0, train_source_size)])
-    valid_loader = data.DataLoader(valid_test_dataset, batch_size=optim['batch_size'], shuffle=True, sampler=valid_sampler)
-    test_loader = data.DataLoader(valid_test_dataset, batch_size=optim['batch_size'], shuffle=True, sampler=test_sampler)
+    valid_loader = data.DataLoader(valid_test_dataset, batch_size=optim['batch_size'], sampler=valid_sampler)
+    test_loader = data.DataLoader(valid_test_dataset, batch_size=optim['batch_size'], sampler=test_sampler)
 
     print("Build model...")
     E = Encoder(VLCS.get('input_shape'))
@@ -94,7 +94,7 @@ if __name__ == '__main__':
         valid_result = learner.evaluate(valid_loader, None, True)
         test_result = learner.evaluate(test_loader, None, False)
         external_result = da_check_invariance(
-            learner.E, train_source_dataset, train_target_dataset, 1000, lr=0.001, hiddens=[E.output_shape()[1]], verbose=0)
+            learner.E, train_dataset, 1000, lr=0.001, hiddens=[E.output_shape()[1]], verbose=0)
         d_log = "valid domain loss: %.4f || external domain acc: %.4f " % (valid_result['d-loss'], external_result['valid-domain-accuracy'])
         # HDivergence
 
