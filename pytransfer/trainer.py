@@ -50,7 +50,8 @@ class Learner(nn.Module):
         return losses
 
     def set_loader(self, dataset, batch_size):
-        self.loader = data.DataLoader(dataset, batch_size=batch_size, shuffle=True)
+        self.loader = data.DataLoader(
+            dataset, batch_size=batch_size, shuffle=True)
         for reguralizer, _ in self.reguralizers.values():
             if reguralizer.loader is None:
                 reguralizer.set_loader(dataset, batch_size)
@@ -140,8 +141,10 @@ class DALearner(Learner):
         super(DALearner, self).__init__(*args, **kwargs)
 
     def set_loader(self, dataset, sampler, batch_size):
-        self.source_loader = data.DataLoader(dataset, batch_size=batch_size, sampler=sampler) # source only
-        self.loader = data.DataLoader(dataset, batch_size=batch_size, shuffle=True) # random sampling
+        self.source_loader = data.DataLoader(
+            dataset, batch_size=batch_size, sampler=sampler)  # source only
+        self.loader = data.DataLoader(
+            dataset, batch_size=batch_size, shuffle=True)  # random sampling
         for reguralizer, _ in self.reguralizers.values():
             if reguralizer.loader is None:
                 reguralizer.set_loader(dataset, batch_size)

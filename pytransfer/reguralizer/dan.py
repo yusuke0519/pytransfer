@@ -32,7 +32,8 @@ class DANReguralizer(_Reguralizer):
         """
         super(DANReguralizer, self).__init__()
 
-        self.stop_update = D is not None  # if D is shared with others, then not update here
+        # if D is shared with others, then not update here
+        self.stop_update = D is not None
         if D is None:
             D = Discriminator(**discriminator_config)
         self.D = D.cuda()
