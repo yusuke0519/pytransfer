@@ -44,8 +44,9 @@ if __name__ == '__main__':
     test_size = valid_test_dataset.cummulative_sizes[1] - valid_size
     data_log = "source (%s) train : %d, valid %d| target (%s) train: %d, test %d" % (source, train_source_size, valid_size, target, train_target_size, test_size)
     print(data_log)
-    valid_sampler = data.sampler.SubsetRandomSampler([i for i in range(0, valid_size)]) 
+    valid_sampler = data.sampler.SubsetRandomSampler([i for i in range(0, valid_size)])
     test_sampler = data.sampler.SubsetRandomSampler([i for i in range(valid_size, valid_test_dataset.cummulative_sizes[1])])
+    source_sampler = data.sampler.SubsetRandomSampler([i for i in range(0, train_source_size)])
     valid_loader = data.DataLoader(valid_test_dataset, batch_size=optim['batch_size'], shuffle=True, sampler=valid_sampler)
     test_loader = data.DataLoader(valid_test_dataset, batch_size=optim['batch_size'], shuffle=True, sampler=test_sampler)
 
@@ -72,13 +73,13 @@ if __name__ == '__main__':
 
     learner.add_reguralizer('d', reg, alpha)
     # log
-    writer = SummaryWriter()
+    #writer = SummaryWriter()
 
     print("Optimization")
     EVALUATE_PER = optim['num_batch'] / 20
     start_time = time.time()
 
-    learner.set_loader(train_dataset, optim['batch_size'])
+    learner.set_loader(train_dataset, source_sampler, optim['batch_size'])
     for batch_idx in range(optim['num_batch']):
         learner.update_reguralizers()
         optimizer.zero_grad()
@@ -103,10 +104,10 @@ if __name__ == '__main__':
         base_log = "%s [%06d, %d s (%d s, %d s)] || valid acc: %.3f, valid loss: %.4f|| test acc: %.3f, test loss: %.4f " % (
             "DAN", batch_idx+1, int(elapsed_time2), int(elapse_train_time), int(elapsed_time1), valid_result['y-accuracy'], valid_result['y-loss'], test_result['y-accuracy'], test_result['y-loss']) 
         print(base_log + ' || ' + d_log)
-        writer.add_scalar('c_loss/valid/%s' % source_domain[0], valid_result['y-loss'], batch_idx)
-        writer.add_scalar('c_acc/valid/%s' % source_domain[0], valid_result['y-accuracy'], batch_idx)
-        writer.add_scalar('c_loss/test/%s' % target_domain[0], test_result['y-loss'], batch_idx)
-        writer.add_scalar('c_acc/test/%s' % target_domain[0], test_result['y-accuracy'], batch_idx)
-        writer.add_scalar('check_invariance/acc', external_result['valid-domain-accuracy'], batch_idx)
+        #writer.add_scalar('c_loss/valid/%s' % source_domain[0], valid_result['y-loss'], batch_idx)
+        #writer.add_scalar('c_acc/valid/%s' % source_domain[0], valid_result['y-accuracy'], batch_idx)
+        #writer.add_scalar('c_loss/test/%s' % target_domain[0], test_result['y-loss'], batch_idx)
+        #writer.add_scalar('c_acc/test/%s' % target_domain[0], test_result['y-accuracy'], batch_idx)
+        #writer.add_scalar('check_invariance/acc', external_result['valid-domain-accuracy'], batch_idx)
 
         start_time = time.time()

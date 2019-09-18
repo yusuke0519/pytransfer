@@ -31,7 +31,7 @@ class _Reguralizer(nn.Module):
     def set_optimizer(self, optimizer):
         self.optimizer = optimizer
 
-    def _evaluate(self, loader, nb_batch):
+    def _evaluate(self, loader, nb_batch, da_flag=False):
         if nb_batch is None:
             nb_batch = len(loader)
         self.eval()
@@ -41,8 +41,9 @@ class _Reguralizer(nn.Module):
         for i, (X, y, d) in enumerate(loader):
             X = Variable(X.float().cuda(), volatile=True)
             target = Variable(d.long().cuda(), volatile=True)
-            if len(np.unique(target.data.cpu())) <= 1:
-                continue
+            if not da_flag:
+                if len(np.unique(target.data.cpu())) <= 1:
+                    continue
             pred = self(X)
             loss += self.loss(X, y, target).data[0]
             pred = np.argmax(pred.data.cpu(), axis=1)

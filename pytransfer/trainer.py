@@ -139,24 +139,24 @@ class DALearner(Learner):
     def __init__(self, *args, **kwargs):
         super(DALearner, self).__init__(*args, **kwargs)
 
-    def set_loader(self, source, target, batch_size):
-        self.source_loader = data.DataLoader(source, batch_size=batch_size, shuffle=True)
-        self.target_loader = data.DataLoader(target, batch_size=batch_size, shuffle=True)
+    def set_loader(self, dataset, sampler, batch_size):
+        self.source_loader = data.DataLoader(dataset, batch_size=batch_size, shuffle=True, sampler=sampler) # source only
+        self.loader = data.DataLoader(dataset, batch_size=batch_size, shuffle=True) # random sampling
         for reguralizer, _ in self.reguralizers.values():
             if reguralizer.loader is None:
-                reguralizer.set_loader(source, target, batch_size)
-        return self.source_loader, self.target_loader
+                reguralizer.set_loader(dataset, batch_size)
+        return self.source_loader, self.loader
 
     def get_batch(self, as_variable=True):
         assert self.source_loader is not None, "Please set loader before call this function"
-        X_s, y_s, d_s = self.source_loader.__iter__().__next__()
-        assert self.target_loader is not None, "Please set loader before call this function"
-        X_t, _, d_t = self.target_loader.__iter__().__next__()
+        X_s, y_s, _ = self.source_loader.__iter__().__next__()
+        assert self.loader is not None, "Please set loader before call this function"
+        X, _, d = self.loader.__iter__().__next__()
         if as_variable:
-            X = Variable(torch.cat((X_s.float(), X_t.float()), 0).cuda())
+            X = Variable(X.float().cuda())
             X_s = Variable(X_s.float().cuda())
             y_s = Variable(y_s.long().cuda())
-            d = Variable(torch.cat((d_s.long(), (d_t + 1).long()), 0).cuda())# target label
+            d = Variable(d.long().cuda())
         return X_s, y_s, X, d
 
     def loss(self, X_s, y_s, X, d):
@@ -164,7 +164,7 @@ class DALearner(Learner):
         y_loss = self.criterion(yhat, y_s)
         loss = y_loss
         for reguralizer, alpha in self.reguralizers.values():
-            loss += alpha * reguralizer.loss(X_s, y_s, X, d)
+            loss += alpha * reguralizer.loss(X, _, d)
         return loss
 
     def losses(self, X_s, y_s, X, d):
@@ -173,7 +173,7 @@ class DALearner(Learner):
         losses = {}
         losses['y'] = y_loss.data[0]
         for i, (reguralizer, alpha) in enumerate(self.reguralizers.values()):
-            losses[i] = reguralizer.loss(X_s, y_s, X, d).data[0]
+            losses[i] = reguralizer.loss(X, _, d).data[0]
         return losses
 
     def evaluate(self, loader, nb_batch=None, source=True):
@@ -199,7 +199,7 @@ class DALearner(Learner):
 
         # evaluate reguralizer
         for name, (reguralizer, _) in iteritems(self.reguralizers):
-            for k, v in iteritems(reguralizer._evaluate(loader, nb_batch, source)):
+            for k, v in iteritems(reguralizer._evaluate(loader, nb_batch, da_flag=True)):
                 result['{}-{}'.format(name, k)] = v
 
         self.train()
