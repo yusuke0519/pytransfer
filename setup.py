@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 # currently torch==0.3 is supported
 requires = ['numpy',
-            'tensorflow==1.4.0',
+            'tensorflow==1.15.0',
             'memoize==1.0.0',
             'luigi==2.6.2',
             'wget==3.2',
