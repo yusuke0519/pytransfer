@@ -151,7 +151,7 @@ python-dateutil==2.7.5
 -e git+git@github.com:yusuke0519/TL_utils.git@bbfda70c48cf13d7afa85dd6af918b06aeb31268#egg=pytransfer
 pytz==2018.5
 pyviz-comms==0.7.0
-PyYAML==3.13
+PyYAML==5.1
 pyzmq==17.1.2
 QtAwesome==0.3.2
 qtconsole==4.2.0
