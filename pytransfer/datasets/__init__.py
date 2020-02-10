@@ -11,3 +11,4 @@ from speech import Speech, BiasedSpeech
 from amazon import Amazon
 from office_c import OfficeC
 from wisdm import WISDM
+from vlcs import VLCS

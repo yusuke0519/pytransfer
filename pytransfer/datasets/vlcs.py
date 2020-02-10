@@ -4,22 +4,21 @@ import os
 import wget
 from scipy.io import loadmat
 
-import numpy as np
 import torch.utils.data as data
 
 from base import DomainDatasetBase
 
 CONFIG = {}
-CONFIG['VOC2007'] = 'https://drive.google.com/uc?export=download&id=1bwuegzRa3MONhmjlJnf6VjWwK1sEkXER'
-CONFIG['LabelMe'] = 'https://drive.google.com/uc?export=download&id=1kaVCI7o9SW4U8UUmc_M4OCqwtBEsNVFJ'
-CONFIG['Caltech101'] = 'https://drive.google.com/uc?export=download&id=1w4XAUGkipynlb1XTErcJA8HE8AwppLiX'
-CONFIG['SUN09'] = 'https://drive.google.com/uc?export=download&id=19FT_9YSF2_EYudWEjOXPRNQDQUO4uRft'
+CONFIG['V'] = 'https://drive.google.com/uc?export=download&id=1bwuegzRa3MONhmjlJnf6VjWwK1sEkXER'
+CONFIG['L'] = 'https://drive.google.com/uc?export=download&id=1kaVCI7o9SW4U8UUmc_M4OCqwtBEsNVFJ'
+CONFIG['C'] = 'https://drive.google.com/uc?export=download&id=1w4XAUGkipynlb1XTErcJA8HE8AwppLiX'
+CONFIG['S'] = 'https://drive.google.com/uc?export=download&id=19FT_9YSF2_EYudWEjOXPRNQDQUO4uRft'
 CONFIG['out'] = os.path.expanduser('~/.torch/datasets')
 
 
 class _SingleVLCS(data.Dataset):
     path = os.path.expanduser('~/.torch/datasets/')
-    all_domain_key = ['VOC2007', 'LabelMe', 'Caltech101', 'SUN09']
+    all_domain_key = ['V', 'L', 'C', 'S']
     input_shape = (4096,)
     num_classes = 5
 
