@@ -4,7 +4,7 @@ from setuptools import setup, find_packages
 requires = ['numpy',
             'tensorflow==1.4.0',
             'memoize==1.0.0',
-            'luigi==2.6.2',
+            'luigi==2.8.0',
             'wget==3.2',
             'torch==0.3.*',
             'torchvision==0.2.1',
