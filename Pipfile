@@ -22,8 +22,9 @@ rarfile = "*"
 future = "*"
 ipython = "*"
 numpy = "*"
-torch = "*"
-torchvision = "*"
+torch = "==1.4.0+cu92"
+torchvision = "==0.5.0+cu92"
+pytorch-lightning = "*"
 
 [requires]
 python_version = "3.6"
