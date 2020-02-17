@@ -7,8 +7,6 @@ verify_ssl = true
 jupyterlab = "*"
 
 [packages]
-torch = "*"
-torchvision = "*"
 wget = "*"
 pandas = "*"
 scikit-learn = "*"
@@ -23,6 +21,9 @@ tensorflow = "==1.15.2"
 rarfile = "*"
 future = "*"
 ipython = "*"
+numpy = "*"
+torch = "*"
+torchvision = "*"
 
 [requires]
 python_version = "3.6"
