@@ -1,5 +1,5 @@
 # # -*- coding: utf-8 -*-
-import torch
+from __future__ import division
 from torch import nn
 
 
@@ -22,7 +22,7 @@ class Encoder(nn.Module):
 
         row = input_shape[2]
         self.input_shape = input_shape
-        self.latent_row = ((row - 4) - 4) / 2
+        self.latent_row = ((row - 4) - 4) // 2
 
         self.feature = nn.Sequential()
         self.feature.add_module('f_conv1', nn.Conv2d(input_shape[0], 32, kernel_size=5))

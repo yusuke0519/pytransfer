@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 import torch.utils.data as data
 
-from base import DomainDatasetBase
+from .base import DomainDatasetBase
 
 CONFIG = {}
 CONFIG['url'] = 'http://www.cis.fordham.edu/wisdm/includes/datasets/latest/WISDM_ar_latest.tar.gz'

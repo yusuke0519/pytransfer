@@ -1,0 +1,28 @@
+[[source]]
+name = "pypi"
+url = "https://pypi.org/simple"
+verify_ssl = true
+
+[dev-packages]
+jupyterlab = "*"
+
+[packages]
+torch = "*"
+torchvision = "*"
+wget = "*"
+pandas = "*"
+scikit-learn = "*"
+requests = "*"
+pillow = "*"
+imageio = "*"
+matplotlib = "*"
+sacred = "*"
+scikit-image = "*"
+statsmodels = "*"
+tensorflow = "==1.15.2"
+rarfile = "*"
+future = "*"
+ipython = "*"
+
+[requires]
+python_version = "3.6"

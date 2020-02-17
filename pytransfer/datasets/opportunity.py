@@ -5,12 +5,12 @@ import zipfile
 import wget
 import numpy as np
 import pandas as pd
-from sampling import sampling
 
 from sklearn.preprocessing import StandardScaler
 import torch.utils.data as data
 
-from base import DomainDatasetBase
+from .sampling import sampling
+from .base import DomainDatasetBase
 
 
 CONFIG = {}

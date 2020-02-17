@@ -8,7 +8,7 @@ from torch.autograd import Variable
 import torch.utils.data as data
 
 from pytransfer.datasets.base import Subset
-from pytransfer.reguralizer.utils import Discriminator
+from pytransfer.regularizer.utils import Discriminator
 
 
 def domain_wise_splits(dataset, split_size, random_seed=1234):

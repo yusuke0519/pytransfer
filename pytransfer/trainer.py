@@ -8,7 +8,6 @@ from sklearn import metrics
 import torch
 from torch import nn
 from torch.utils import data
-from torch.autograd import Variable
 
 
 class Learner(nn.Module):
@@ -16,7 +15,7 @@ class Learner(nn.Module):
         super(Learner, self).__init__()
         self.E = E
         self.M = M
-        self.reguralizers = OrderedDict()
+        self.regularizers = OrderedDict()
         self.criterion = nn.NLLLoss()
 
     def forward(self, X):
@@ -24,46 +23,46 @@ class Learner(nn.Module):
         y = self.M(z)
         return y
 
-    def add_reguralizer(self, name, reguralizer, alpha):
-        assert name not in self.reguralizers, "name {} is already registered".format(name)
-        self.reguralizers[name] = (reguralizer, alpha)
+    def add_regularizer(self, name, regularizer, alpha):
+        assert name not in self.regularizers, "name {} is already registered".format(name)
+        self.regularizers[name] = (regularizer, alpha)
 
-    def update_reguralizers(self):
-        for reguralizer, _ in self.reguralizers.values():
-            reguralizer.update()
+    def update_regularizers(self):
+        for regularizer, _ in self.regularizers.values():
+            regularizer.update()
 
     def loss(self, X, y, d):
         yhat = self(X)
         y_loss = self.criterion(yhat, y)
         loss = y_loss
-        for reguralizer, alpha in self.reguralizers.values():
-            loss += alpha * reguralizer.loss(X, y, d)
+        for regularizer, alpha in self.regularizers.values():
+            loss += alpha * regularizer.loss(self.E(X), y, d)
         return loss
 
     def losses(self, X, y, d):
         yhat = self(X)
         y_loss = self.criterion(yhat, y)
         losses = {}
-        losses['y'] = y_loss.data[0]
-        for i, (reguralizer, alpha) in enumerate(self.reguralizers.values()):
-            losses[i] = reguralizer.loss(X, y, d).data[0]
+        losses['y'] = y_loss.item()
+        for i, (regularizer, alpha) in enumerate(self.regularizers.values()):
+            losses[i] = regularizer.loss(self.E(X), y, d).item()
         return losses
 
     def set_loader(self, dataset, batch_size):
         self.loader = data.DataLoader(
             dataset, batch_size=batch_size, shuffle=True)
-        for reguralizer, _ in self.reguralizers.values():
-            if reguralizer.loader is None:
-                reguralizer.set_loader(dataset, batch_size)
+        for regularizer, _ in self.regularizers.values():
+            if regularizer.loader is None:
+                regularizer.set_loader(dataset, batch_size)
         return self.loader
 
-    def get_batch(self, as_variable=True):
+    def get_batch(self, as_variable=True, device='cpu'):
         assert self.loader is not None, "Please set loader before call this function"
         X, y, d = self.loader.__iter__().__next__()
         if as_variable:
-            X = Variable(X.float().cuda())
-            y = Variable(y.long().cuda())
-            d = Variable(d.long().cuda())
+            X = X.float().to(device)
+            y = y.long().to(device)
+            d = d.long().to(device)
         return X, y, d
 
     def predict_y(self, input_data):
@@ -90,9 +89,9 @@ class Learner(nn.Module):
         for k, v in iteritems(self._evaluate(loader, nb_batch)):
             result['{}-{}'.format('y', k)] = v
 
-        # evaluate reguralizer
-        for name, (reguralizer, _) in iteritems(self.reguralizers):
-            for k, v in iteritems(reguralizer._evaluate(loader, nb_batch)):
+        # evaluate regularizer
+        for name, (regularizer, _) in iteritems(self.regularizers):
+            for k, v in iteritems(regularizer._evaluate(loader, nb_batch)):
                 result['{}-{}'.format(name, k)] = v
 
         self.train()
@@ -103,17 +102,18 @@ class Learner(nn.Module):
         pred_ys = []
         loss = 0
         criterion = nn.NLLLoss()
-        for i, (X, y, d) in enumerate(loader):
-            X = Variable(X.float().cuda(), volatile=True)
-            target = Variable(y.long().cuda(), volatile=True)
-            pred_y = self.predict_y(X)
-            loss += criterion(pred_y, target).data[0]
-            pred_y = np.argmax(pred_y.data.cpu(), axis=1)
-            ys.append(y.numpy())
-            pred_ys.append(pred_y.numpy())
-            if i+1 == nb_batch:
-                break
-        loss /= nb_batch
+        with torch.no_grad():
+            for i, (X, y, d) in enumerate(loader):
+                X = X.float().cuda()
+                target = y.long().cuda()
+                pred_y = self.predict_y(X)
+                loss += criterion(pred_y, target).data[0]
+                pred_y = np.argmax(pred_y.data.cpu(), axis=1)
+                ys.append(y.numpy())
+                pred_ys.append(pred_y.numpy())
+                if i+1 == nb_batch:
+                    break
+            loss /= nb_batch
         # print(nb_batch, loss)
 
         y = np.concatenate(ys)
@@ -145,9 +145,9 @@ class DALearner(Learner):
             dataset, batch_size=batch_size, sampler=sampler)  # source only
         self.loader = data.DataLoader(
             dataset, batch_size=batch_size, shuffle=True)  # random sampling
-        for reguralizer, _ in self.reguralizers.values():
-            if reguralizer.loader is None:
-                reguralizer.set_loader(dataset, batch_size)
+        for regularizer, _ in self.regularizers.values():
+            if regularizer.loader is None:
+                regularizer.set_loader(dataset, batch_size)
         return self.source_loader, self.loader
 
     def get_batch(self, as_variable=True):
@@ -166,8 +166,8 @@ class DALearner(Learner):
         yhat = self(X_s)
         y_loss = self.criterion(yhat, y_s)
         loss = y_loss
-        for reguralizer, alpha in self.reguralizers.values():
-            loss += alpha * reguralizer.loss(X, y_s, d)
+        for regularizer, alpha in self.regularizers.values():
+            loss += alpha * regularizer.loss(X, y_s, d)
         return loss
 
     def losses(self, X_s, y_s, X, d):
@@ -175,8 +175,8 @@ class DALearner(Learner):
         y_loss = self.criterion(yhat, y_s)
         losses = {}
         losses['y'] = y_loss.data[0]
-        for i, (reguralizer, alpha) in enumerate(self.reguralizers.values()):
-            losses[i] = reguralizer.loss(X, y_s, d).data[0]
+        for i, (regularizer, alpha) in enumerate(self.regularizers.values()):
+            losses[i] = regularizer.loss(X, y_s, d).data[0]
         return losses
 
     def evaluate(self, loader, nb_batch=None, source=True):
@@ -200,9 +200,9 @@ class DALearner(Learner):
         for k, v in iteritems(self._evaluate(loader, nb_batch)):
             result['{}-{}'.format('y', k)] = v
 
-        # evaluate reguralizer
-        for name, (reguralizer, _) in iteritems(self.reguralizers):
-            for k, v in iteritems(reguralizer._evaluate(loader, nb_batch, da_flag=True)):
+        # evaluate regularizer
+        for name, (regularizer, _) in iteritems(self.regularizers):
+            for k, v in iteritems(regularizer._evaluate(loader, nb_batch, da_flag=True)):
                 result['{}-{}'.format(name, k)] = v
 
         self.train()

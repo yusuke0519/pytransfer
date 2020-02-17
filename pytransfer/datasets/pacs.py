@@ -4,13 +4,12 @@ import os
 import zipfile
 import requests
 from glob import glob
-from PIL import Image
 
 import numpy as np
-from scipy.misc import imresize
+from PIL import Image
 import torch.utils.data as data
 
-from base import DomainDatasetBase
+from .base import DomainDatasetBase
 
 CONFIG = {}
 CONFIG['url'] = "https://docs.google.com/uc?export=download"
@@ -122,7 +121,7 @@ class _SinglePACS(data.Dataset):
     @classmethod
     def scale_augmentation(cls, image, scale_range=(256, 400), crop_size=224):
         scale_size = np.random.randint(*scale_range)
-        image = imresize(image, (scale_size, scale_size))
+        image = np.array(Image.fromarray(image).resize((scale_size, scale_size)))
         image = cls.random_crop(image, (crop_size, crop_size))
         return image
 

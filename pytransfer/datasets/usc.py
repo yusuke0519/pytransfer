@@ -6,10 +6,9 @@ import numpy as np
 import scipy.io
 from sklearn.preprocessing import StandardScaler
 import torch.utils.data as data
-from sampling import sampling
 
-
-from base import DomainDatasetBase
+from .sampling import sampling
+from .base import DomainDatasetBase
 
 CONFIG = {}
 CONFIG['url'] = 'http://sipi.usc.edu/HAD/USC-HAD.zip'
@@ -27,6 +26,7 @@ class _SingleUser(data.Dataset):
         if not os.path.exists(self.path):
             self.download()
         scaler = StandardScaler()
+
 
         self.domain_key = domain_key
 

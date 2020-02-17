@@ -6,7 +6,7 @@ from scipy.io import loadmat
 
 import torch.utils.data as data
 
-from base import DomainDatasetBase
+from .base import DomainDatasetBase
 
 CONFIG = {}
 CONFIG['V'] = 'https://drive.google.com/uc?export=download&id=1bwuegzRa3MONhmjlJnf6VjWwK1sEkXER'

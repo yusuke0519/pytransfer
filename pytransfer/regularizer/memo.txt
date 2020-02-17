@@ -26,17 +26,17 @@ class Learner(nn.Module):
   def __init__(self, E, M, dataset):
     self.E = E
     self.M = M
-    self.reguralizer_info = []
+    self.regularizer_info = []
     self.dataset = dataset
 
-  def add_reguralizer(self, reguralizer, weight, scheduler=None):
-    self.reguralizer.append((reguralizer, weight, scheduler))
+  def add_regularizer(self, regularizer, weight, scheduler=None):
+    self.regularizer.append((regularizer, weight, scheduler))
 
   def fit_loop(self):
-    for reguralizer, _, scheduler in self.reguralizer_info:
-      reguralizer.update()
+    for regularizer, _, scheduler in self.regularizer_info:
+      regularizer.update()
     
     y_pred = ...
     loss = y_loss
-    for reguralizer, weight, scheduler in self.reguralizer_info:
+    for regularizer, weight, scheduler in self.regularizer_info:
       loss += weight * y_loss

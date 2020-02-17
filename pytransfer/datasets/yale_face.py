@@ -9,7 +9,7 @@ from zipfile import ZipFile
 import numpy as np
 import torch.utils.data as data
 
-from base import DomainDatasetBase
+from .base import DomainDatasetBase
 
 CONFIG = {}
 CONFIG['url'] = 'http://vision.ucsd.edu/extyaleb/CroppedYaleBZip/CroppedYale.zip'

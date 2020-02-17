@@ -7,7 +7,7 @@ import wget
 import torch.utils.data as data
 from sklearn.feature_extraction.text import HashingVectorizer
 
-from base import DomainDatasetBase
+from .base import DomainDatasetBase
 
 
 CONFIG = {}

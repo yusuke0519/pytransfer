@@ -1,14 +1,13 @@
 # -*- coding: utf-8 -*-
-
+import pickle
 import os
 import gzip
 import wget
-import cPickle as pickle
 
 import numpy as np
 import torch.utils.data as data
 
-from base import DomainDatasetBase
+from .base import DomainDatasetBase
 
 
 CONFIG = {}
@@ -30,7 +29,7 @@ class _SingleMNISTR(data.Dataset):
         domain_id = self.all_domain_key.index(domain_key)
         img_rows, img_cols = self.input_shape[1:]
 
-        all_domains = pickle.load(gzip.open(self.path, 'rb'))
+        all_domains = pickle.load(gzip.open(self.path, 'rb'), encoding='latin1')
         X, y = all_domains[domain_id]
         X = X.reshape(X.shape[0], 1, img_rows, img_cols)
         self.X = X

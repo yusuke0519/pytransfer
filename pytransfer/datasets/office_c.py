@@ -10,7 +10,7 @@ import numpy as np
 import rarfile
 import torch.utils.data as data
 
-from base import DomainDatasetBase
+from .base import DomainDatasetBase
 
 
 CONFIG = {}

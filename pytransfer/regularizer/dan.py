@@ -1,8 +1,8 @@
 # # -*- coding: utf-8 -*-
 from torch import nn
 
-from pytransfer.reguralizer.utils import Discriminator
-from pytransfer.reguralizer import _Reguralizer
+from pytransfer.regularizer.utils import Discriminator
+from pytransfer.regularizer import _Reguralizer
 
 
 class DANReguralizer(_Reguralizer):
@@ -17,14 +17,12 @@ class DANReguralizer(_Reguralizer):
 
     """
 
-    def __init__(self, learner, D=None, discriminator_config=None, K=1):
+    def __init__(self, feature_extractor, D=None, discriminator_config=None, K=1):
         """
-        Initialize dan base reguralizer
+        Initialize dan base regularizer
 
         Parameter
         ---------
-        learner : instance of Learner
-          TBA
         discriminator_config : dict
           configuration file for the discriminator
         K : int
@@ -36,28 +34,30 @@ class DANReguralizer(_Reguralizer):
         self.stop_update = D is not None
         if D is None:
             D = Discriminator(**discriminator_config)
-        self.D = D.cuda()
+        self.D = D
         print(self.D)
         self.num_output = self.D.num_domains
         # TODO: DANReguralizer should not assume that D has an attribute num_domain
 
-        self.learner = learner
         self.K = K
         self.criterion = nn.NLLLoss()
         self.loader = None
+        self.feature_extractor = feature_extractor
 
-    def forward(self, X):
-        z = self.learner.E(X)
+    def forward(self, z):
         return self.D(z)
 
-    def loss(self, X, y, d):
-        d_pred = self(X)
+    def loss(self, z, _, d):
+        """ Loss for the encoder update
+        """
+        d_pred = self(z)
         d_loss = self.criterion(d_pred, d)
         return -1 * d_loss
 
-    def d_loss(self, X, y, d):
-        z = self.learner.E(X)
-        d_pred = self.D(z)
+    def d_loss(self, z, _, d):
+        """ Loss for the discriminator update
+        """
+        d_pred = self(z)
         d_loss = self.criterion(d_pred, d)
         return d_loss
 
@@ -65,10 +65,11 @@ class DANReguralizer(_Reguralizer):
         if self.stop_update:
             return None
 
+
         for _ in range(self.K):
             self.optimizer.zero_grad()
             X, _, d = self.get_batch()
-            d_loss = self.d_loss(X, _, d)
+            d_loss = self.d_loss(self.feature_extractor(X), _, d)
             d_loss.backward()
             self.optimizer.step()
 

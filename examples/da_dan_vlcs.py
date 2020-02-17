@@ -15,7 +15,7 @@ from pytransfer.datasets.base import Subset
 from pytransfer.datasets import VLCS
 from pytransfer.trainer import DALearner
 from vlcs_network import Encoder, Classifier
-from pytransfer.reguralizer.dan import DANReguralizer
+from pytransfer.regularizer.dan import DANReguralizer
 from exp_utils import da_check_invariance, domain_wise_splits
 from tensorboardX import SummaryWriter
 
@@ -77,7 +77,7 @@ if __name__ == '__main__':
     # optimizer = Adam(learner.parameters(), lr=optim['lr'])
     print(optimizer)
 
-    print("Set reguralizer")
+    print("Set regularizer")
     discriminator_config = {
         "num_domains": 2,  # Source & Target
         "input_shape": E.output_shape(), 'hiddens': [E.output_shape()[1]]}
@@ -92,7 +92,7 @@ if __name__ == '__main__':
     #    filter(lambda p: p.requires_grad, reg.parameters()), lr=optim['lr'])
     reg.set_optimizer(reg_optimizer)
 
-    learner.add_reguralizer('d', reg, alpha)
+    learner.add_regularizer('d', reg, alpha)
     # log
     if tbx:
         writer = SummaryWriter()
@@ -103,7 +103,7 @@ if __name__ == '__main__':
 
     learner.set_loader(train_dataset, source_sampler, optim['batch_size'])
     for batch_idx in range(optim['num_batch']):
-        learner.update_reguralizers()
+        learner.update_regularizers()
         optimizer.zero_grad()
         X_s, y_s, X, d = learner.get_batch()
         loss = learner.loss(X_s, y_s, X, d)

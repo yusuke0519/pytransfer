@@ -11,13 +11,13 @@ from torch.autograd import Variable
 
 from pytransfer.learners.utils import get_classifier
 from pytransfer.learners.utils import SpectralNorm
-from pytransfer.reguralizer import _Reguralizer, DANReguralizer
+from pytransfer.regularizer import _Reguralizer, DANReguralizer
 
 
 class PairwiseWassersteinDistance(DANReguralizer):
     def __init__(self, learner, D=None, discriminator_config=None, K=1):
         """
-        Initialize dan base reguralizer
+        Initialize dan base regularizer
 
         Parameter
         ---------

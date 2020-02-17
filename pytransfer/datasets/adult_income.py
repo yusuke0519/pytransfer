@@ -2,16 +2,13 @@
 
 import os
 import wget
-import matplotlib
-matplotlib.use('Agg')
-
 import numpy as np
 import pandas as pd
 import torch.utils.data as data
 import statsmodels.api as sm
 from sklearn.metrics import accuracy_score, roc_auc_score
 
-from base import DomainDatasetBase
+from .base import DomainDatasetBase
 
 COLUMNS = ["age",
            "workclass",

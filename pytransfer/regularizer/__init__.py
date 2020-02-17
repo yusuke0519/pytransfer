@@ -6,24 +6,20 @@ from sklearn import metrics
 import torch
 from torch import nn
 from torch.utils import data
-from torch.autograd import Variable
 
 
 class _Reguralizer(nn.Module):
-    def set_learner(self, learner):
-        self.learner = learner
-
     def set_loader(self, dataset, batch_size):
         self.loader = data.DataLoader(dataset, batch_size=batch_size, shuffle=True)
         return self.loader
 
-    def get_batch(self, as_variable=True):
+    def get_batch(self, as_variable=True, device='cpu'):
         assert self.loader is not None, "Please set loader before call this function"
         X, y, d = self.loader.__iter__().__next__()
         if as_variable:
-            X = Variable(X.float().cuda())
-            y = Variable(y.long().cuda())
-            d = Variable(d.long().cuda())
+            X = X.float().to(device)
+            y = y.long().to(device)
+            d = d.long().to(device)
         if hasattr(self.D, 'label_linear'):
             X = [X, y]
         return X, y, d
@@ -39,18 +35,19 @@ class _Reguralizer(nn.Module):
         preds = []
         loss = 0
         for i, (X, y, d) in enumerate(loader):
-            X = Variable(X.float().cuda(), volatile=True)
-            target = Variable(d.long().cuda(), volatile=True)
-            if not da_flag:
-                if len(np.unique(target.data.cpu())) <= 1:
-                    continue
-            pred = self(X)
-            loss += self.loss(X, y, target).data[0]
-            pred = np.argmax(pred.data.cpu(), axis=1)
-            targets.append(d.numpy())
-            preds.append(pred.numpy())
-            if i+1 == nb_batch:
-                break
+            with torch.no_grad():
+                X = X.float().to(device)
+                target = d.long().cuda()
+                if not da_flag:
+                    if len(np.unique(target.data.cpu())) <= 1:
+                        continue
+                pred = self(X)
+                loss += self.loss(X, y, target).data[0]
+                pred = np.argmax(pred.data.cpu(), axis=1)
+                targets.append(d.numpy())
+                preds.append(pred.numpy())
+                if i+1 == nb_batch:
+                    break
         loss /= nb_batch
 
         result = OrderedDict()
