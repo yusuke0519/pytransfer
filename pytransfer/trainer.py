@@ -104,11 +104,11 @@ class Learner(nn.Module):
         criterion = nn.NLLLoss()
         with torch.no_grad():
             for i, (X, y, d) in enumerate(loader):
-                X = X.float().cuda()
-                target = y.long().cuda()
+                X = X.float()
+                target = y.long()
                 pred_y = self.predict_y(X)
                 loss += criterion(pred_y, target).data[0]
-                pred_y = np.argmax(pred_y.data.cpu(), axis=1)
+                pred_y = np.argmax(pred_y.data, axis=1)
                 ys.append(y.numpy())
                 pred_ys.append(pred_y.numpy())
                 if i+1 == nb_batch:
@@ -156,10 +156,10 @@ class DALearner(Learner):
         assert self.loader is not None, "Please set loader before call this function"
         X, _, d = self.loader.__iter__().__next__()
         if as_variable:
-            X = Variable(X.float().cuda())
-            X_s = Variable(X_s.float().cuda())
-            y_s = Variable(y_s.long().cuda())
-            d = Variable(d.long().cuda())
+            X = X.float()
+            X_s = X_s.float()
+            y_s = y_s.long()
+            d = d.long()
         return X_s, y_s, X, d
 
     def loss(self, X_s, y_s, X, d):
