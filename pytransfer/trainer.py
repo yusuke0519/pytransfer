@@ -107,7 +107,7 @@ class Learner(nn.Module):
                 X = X.float()
                 target = y.long()
                 pred_y = self.predict_y(X)
-                loss += criterion(pred_y, target).data[0]
+                loss += criterion(pred_y, target).item()
                 pred_y = np.argmax(pred_y.data, axis=1)
                 ys.append(y.numpy())
                 pred_ys.append(pred_y.numpy())
@@ -174,9 +174,9 @@ class DALearner(Learner):
         yhat = self(X_s)
         y_loss = self.criterion(yhat, y_s)
         losses = {}
-        losses['y'] = y_loss.data[0]
+        losses['y'] = y_loss.item()
         for i, (regularizer, alpha) in enumerate(self.regularizers.values()):
-            losses[i] = regularizer.loss(X, y_s, d).data[0]
+            losses[i] = regularizer.loss(X, y_s, d).item()
         return losses
 
     def evaluate(self, loader, nb_batch=None, source=True):

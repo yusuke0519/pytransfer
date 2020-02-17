@@ -19,6 +19,7 @@ from mnistr_network import Encoder, Classifier
 from pytransfer.regularizer.dan import DANReguralizer
 from exp_utils import check_invariance
 
+import pytorch_lightning as pl
 
 def domain_wise_splits(dataset, split_size, random_seed=1234):
     datasets1 = []
@@ -42,6 +43,8 @@ def domain_wise_splits(dataset, split_size, random_seed=1234):
     datasets2 = dataset_class(domain_keys=domain_keys, datasets=datasets2, **dataset.domain_specific_params())
     return datasets1, datasets2
 
+
+# class
 
 def prepare_datasets(train_domain, test_domain):
     train_valid_dataset = MNISTR(train_domain)

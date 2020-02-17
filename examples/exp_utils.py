@@ -46,7 +46,7 @@ def check_invariance(
         hiddens = [100]
     E.eval()
     D = Discriminator(
-        len(dataset.domain_keys), E.output_shape(), hiddens=hiddens).cuda()
+        len(dataset.domain_keys), E.output_shape(), hiddens=hiddens)
     train_loader = data.DataLoader(dataset, batch_size=128, shuffle=True)
     test_loader = data.DataLoader(valid_dataset, batch_size=128, shuffle=False)
     optimizer = optim.RMSprop(D.parameters(), lr=lr, alpha=0.9)
@@ -55,9 +55,9 @@ def check_invariance(
     for i in range(1, num_iterations+1):
         optimizer.zero_grad()
         X, _, d = train_loader.__iter__().__next__()
-        X = Variable(X.float().cuda(), volatile=True)
-        z = Variable(E(X).data)
-        d = Variable(d.long().cuda())
+        X = X.float()
+        z = E(X).data
+        d = d.long()
         d_pred = D(z)
         loss = criterion(d_pred, d)
 
@@ -77,7 +77,7 @@ def check_invariance(
     ds = []
     pred_ds = []
     for X, _, d in test_loader:
-        X = Variable(X.float().cuda())
+        X = X.float()
         pred_d = D(E(X))
         pred_d = np.argmax(pred_d.data.cpu(), axis=1)
         ds.append(d.numpy())
