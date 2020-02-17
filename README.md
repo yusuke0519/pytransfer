@@ -1,14 +1,9 @@
-# TL_utils
-the utilities for the transfer learning
+# Pytransfer
+the library for the transfer learning
 
 ## Directories
 - datasets
-- learner
-- models (currently not supported)
-
-## Versions
-- Python 2.7.13 (anaconda2-4.4.0)
-- pytorch 0.3.* (You have to manually install pytorch when CUDA version problems occur)
+- regularizers
 
 ## Datasets
 - mnistr.py: rotated MNIST
@@ -20,6 +15,4 @@ the utilities for the transfer learning
   - the link for tensorflow tutorials: https://www.tensorflow.org/tutorials/audio_recognition
 
 ## Instructions
-- prepare anaconda2-4.4.0
-- ```pip install -e .```
-- ```apt-get install unrar``` (for Office+Caltech dataset)
+- `pipenv install`
