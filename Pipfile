@@ -23,6 +23,7 @@ future = "*"
 ipython = "*"
 numpy = "*"
 pytorch-lightning = "*"
+pytransfer = {editable = true,path = "."}
 
 [requires]
 python_version = "3.6"
