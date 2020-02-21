@@ -6,37 +6,31 @@
 from future.utils import iteritems
 import os
 from collections import OrderedDict
+from argparse import ArgumentParser
 
-import numpy as np
-from sklearn import metrics
 import torch
 from torch import nn
 from torch.utils import data
 
-import six
-import time
 import random
-import torch
 from torch.optim import RMSprop
-import torch.utils.data as data
 from exp_utils import check_invariance
 import logging
 
 import pytorch_lightning as pl
-from pytorch_lightning.logging import TensorBoardLogger
 
 from pytransfer.datasets.base import Subset
 from pytransfer.datasets import MNISTR
-from pytransfer.trainer import Learner
 from mnistr_network import Encoder, Classifier
 from pytransfer.regularizer.dan import DANReguralizer
+
 
 def domain_wise_splits(dataset, split_size, random_seed=1234):
     datasets1 = []
     datasets2 = []
     dataset_class = dataset.__class__
     domain_keys = dataset.domain_keys
-    # domain_keys = dataset.domain_keys￿
+
     for domain_key in domain_keys:
         single_dataset = dataset.get_single_dataset(domain_key, **dataset.domain_specific_params())
         len_dataset = len(single_dataset)
@@ -44,7 +38,6 @@ def domain_wise_splits(dataset, split_size, random_seed=1234):
         indices = list(range(len_dataset))
         random.shuffle(indices)
         indices = torch.LongTensor(indices)
-        # indices2 = indices[train_size:]
         dataset1, dataset2 = Subset(single_dataset, indices[:train_size]), Subset(single_dataset, indices[train_size:])
         datasets1.append(dataset1)
         datasets2.append(dataset2)
@@ -63,19 +56,29 @@ def prepare_datasets(train_domain, test_domain):
 
 
 class DomainGeneralization(pl.LightningModule):
-    def __init__(self, E, M, reguralizers, reguralizers_weight, optim, datasets):
+    def __init__(self, E, M, hparams):
         super(DomainGeneralization, self).__init__()
         self.E = E
         self.M = M
-        self.regularizers = OrderedDict()
-        for reg, weight in zip (reguralizers, reguralizers_weight):
-            self.add_regularizer(reg.__class__.__name__, reg, weight)
         self.criterion = nn.NLLLoss()
-        self.optim = optim
-        self.datasets_config = datasets
-        
-        self.datasets = prepare_datasets(datasets['train_domain'], datasets['test_domain'])
+        self.hparams = hparams
+        self.datasets = prepare_datasets(
+            MNISTR.get_disjoint_domains(self.hparams.test_domain), self.hparams.test_domain)
+        self.configure_regularizer()
         logging.info("Initialized")
+
+    def configure_regularizer(self):
+        self.regularizers = OrderedDict()
+        num_domains = len(MNISTR.get_disjoint_domains(self.hparams.test_domain))
+        regs = []
+        if self.hparams.reg_name == 'dan':
+            discriminator_config = {
+                "num_domains": num_domains,
+                "input_shape": self.E.output_shape(), 'hiddens': self.hparams.D_hiddens}
+            reg = DANReguralizer(feature_extractor=E, discriminator_config=discriminator_config)
+            self.add_regularizer(reg.__class__.__name__, reg, self.hparams.reg_weight)
+            regs.append(reg)
+        self.regs = nn.ModuleList(regs)
 
     def add_regularizer(self, name, regularizer, alpha):
         assert name not in self.regularizers, "name {} is already registered".format(name)
@@ -83,20 +86,29 @@ class DomainGeneralization(pl.LightningModule):
 
     def configure_optimizers(self):
         logging.info("Configure optimizers")
-        optim = self.optim
         opt_list = []
-        opt_list.append(RMSprop(list(self.E.parameters())+list(self.M.parameters()), lr=optim['lr'], alpha=0.9))
+        opt_list.append(RMSprop(list(self.E.parameters())+list(self.M.parameters()), lr=self.hparams.lr, alpha=0.9))
 
         for reg, _ in self.regularizers.values():
-            reg.set_optimizer(RMSprop(filter(lambda p: p.requires_grad, reg.parameters()), lr=optim['lr'], alpha=0.9))
-            reg.set_loader(self.datasets[0], self.optim['batch_size'])
-            # opt_list.append(RMSprop(filter(lambda p: p.requires_grad, reg.parameters()), lr=optim['lr'], alpha=0.9))
+            reg.set_optimizer(
+                RMSprop(filter(lambda p: p.requires_grad, reg.parameters()), lr=self.hparams.lr, alpha=0.9))
+            reg.set_loader(self.datasets[0], self.hparams.batch_size)
         return opt_list, []
 
     @pl.data_loader
     def train_dataloader(self):
         dataset = self.datasets[0]
-        return data.DataLoader(dataset, batch_size=self.optim['batch_size'], shuffle=True)
+        return data.DataLoader(dataset, batch_size=self.hparams.batch_size, shuffle=True)
+
+    @pl.data_loader
+    def val_dataloader(self):
+        dataset = self.datasets[1]
+        return data.DataLoader(dataset, batch_size=self.hparams.batch_size, shuffle=False)
+
+    @pl.data_loader
+    def test_dataloader(self):
+        dataset = self.datasets[2]
+        return data.DataLoader(dataset, batch_size=self.hparams.batch_size, shuffle=False)
 
     def forward(self, X):
         z = self.E(X)
@@ -111,7 +123,7 @@ class DomainGeneralization(pl.LightningModule):
 
     def update_regularizers(self):
         for regularizer, _ in self.regularizers.values():
-            regularizer.update()
+            regularizer.update(self.on_gpu)
 
     def loss(self, X, y, d):
         yhat = self(X)
@@ -121,91 +133,33 @@ class DomainGeneralization(pl.LightningModule):
             loss += alpha * regularizer.loss(self.E(X), y, d)
         return loss
 
-    def losses(self, X, y, d):
-        yhat = self(X)
-        y_loss = self.criterion(yhat, y)
-        losses = {}
-        losses['y'] = y_loss.item()
-        for i, (regularizer, alpha) in enumerate(self.regularizers.values()):
-            losses[i] = regularizer.loss(self.E(X), y, d).item()
-        return losses
-
-    def set_loader(self, dataset, batch_size):
-        self.loader = data.DataLoader(
-            dataset, batch_size=batch_size, shuffle=True)
-        for regularizer, _ in self.regularizers.values():
-            if regularizer.loader is None:
-                regularizer.set_loader(dataset, batch_size)
-        return self.loader
-
-    def get_batch(self, as_variable=True, device='cpu'):
-        assert self.loader is not None, "Please set loader before call this function"
-        X, y, d = self.loader.__iter__().__next__()
-        if as_variable:
-            X = X.float().to(device)
-            y = y.long().to(device)
-            d = d.long().to(device)
-        return X, y, d
-
-    def predict_y(self, input_data):
-        return self.M(self.E(input_data))
-
-    def evaluate(self, loader, nb_batch=None):
-        """
-        Evaluate model given data loader
-
-        Parameter
-        ---------
-        nb_batch : int (default: None)
-          # batch to calculate the loss and accuracy
-        loader : DataLoader
-          data loader
-
-        """
-        if nb_batch is None:
-            nb_batch = len(loader)
-        self.eval()
+    def validation_step(self, batch, batch_idx):
         result = OrderedDict()
-
-        # evaluate main
-        for k, v in iteritems(self._evaluate(loader, nb_batch)):
-            result['{}-{}'.format('y', k)] = v
-
-        # evaluate regularizer
-        for name, (regularizer, _) in iteritems(self.regularizers):
-            for k, v in iteritems(regularizer._evaluate(loader, nb_batch)):
-                result['{}-{}'.format(name, k)] = v
-
-        self.train()
-        return result
-
-    def _evaluate(self, loader, nb_batch):
-        ys = []
-        pred_ys = []
-        loss = 0
+        X, y, d = batch
+        X = X.float()
+        pred_y = self(X)
         criterion = nn.NLLLoss()
-        with torch.no_grad():
-            for i, (X, y, d) in enumerate(loader):
-                X = X.float()
-                target = y.long()
-                pred_y = self.predict_y(X)
-                loss += criterion(pred_y, target).item()
-                pred_y = np.argmax(pred_y.data, axis=1)
-                ys.append(y.numpy())
-                pred_ys.append(pred_y.numpy())
-                if i+1 == nb_batch:
-                    break
-            loss /= nb_batch
-        # print(nb_batch, loss)
+        loss = criterion(pred_y, y).item()
+        y_hat = torch.argmax(pred_y, dim=1)
+        acc = torch.sum(y == y_hat).item() / (len(y) * 1.0)
+        result['y-loss'] = loss
+        result['y-acc'] = acc
 
-        y = np.concatenate(ys)
-        pred_y = np.concatenate(pred_ys)
-
-        result = OrderedDict()
-        result['accuracy'] = metrics.accuracy_score(y, pred_y)
-        result['f1macro'] = metrics.f1_score(y, pred_y, average='macro')
-        result['loss'] = loss
+        for name, (reg, _) in iteritems(self.regularizers):
+            for k, v in iteritems(reg.validation_step((X, y, d), batch_idx)):
+                result['{}-{}'.format(name, k)] = v
         return result
+
+    def validation_end(self, outputs):
+        avg_result = OrderedDict()
+        for k, v in outputs[0].items():
+            avg_result[k] = 0.0
+        for output in outputs:
+            for k, v in output.items():
+                avg_result[k] += v
+        for k, v in outputs[0].items():
+            avg_result[k] /= len(outputs)
+        return {'log': avg_result, 'val_loss': avg_result['y-loss']}
 
     def save(self, out, prefix=None):
         names = ['E.pth', 'M.pth']
@@ -215,36 +169,54 @@ class DomainGeneralization(pl.LightningModule):
 
         for net, name in zip([self.E, self.M], names):
             torch.save(net.state_dict(), name)
-        return names        
+        return names
 
+    @staticmethod
+    def add_model_specific_args(parent_parser):
+        parser = ArgumentParser(parents=[parent_parser])
+
+        # dataset
+        parser.add_argument('--dataset_name', default='mnistr', type=str)
+        parser.add_argument('--test_domain', default='M75', type=str)
+
+        # regularizer
+        parser.add_argument('--reg_name', default='dan', type=str)
+        parser.add_argument('--reg_weight', default=1.0, type=float)
+        parser.add_argument('--D_hiddens', default=[400], nargs='*', type=int)
+
+        return parser
 
 
 if __name__ == '__main__':
+    from pytorch_lightning.logging import MLFlowLogger
+    from mlflow.tracking.client import MlflowClient
+    from mlflow.entities import ViewType
+
     print("Execute example")
+    parser = ArgumentParser(add_help=False)
+    parser.add_argument('--batch_size', default=128, type=int)
+    parser.add_argument('--lr', default=0.001, type=float)
+
+    parser = DomainGeneralization.add_model_specific_args(parser)
+    hparams = parser.parse_args()
+
+    print(hparams)
+    query = ' and '.join(
+        ['params.{}="{}"'.format(k, str(v)) for k, v in vars(hparams).items()] + ['attributes.status="FINISHED"'])
+    print(query)
+    runs = MlflowClient().search_runs(experiment_ids=["1"], filter_string=query, run_view_type=ViewType.ALL)
+
+    if len(runs) > 0:
+        logging.info("The task has been already finished")
+
     # Parameters
-    datasets = {'name': "MNISTR", 'train_domain': ['M0', 'M15', 'M30', 'M45', 'M60'], 'test_domain': ['M75']}
-    optim = {'lr': 0.001, 'batch_size': 128, 'num_batch': 100}
-    alpha = 1.0
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-
-
-    print("Load datasets")
-
     print("Build model...")
     E = Encoder(MNISTR.get('input_shape'), hidden_size=400)
     M = Classifier(MNISTR.get('num_classes'), E.output_shape())
     M.num_classes = MNISTR.get('num_classes')
 
-    print(E)
-    print(M)
-    print("Set regularizer")
-    discriminator_config = {
-        "num_domains": len(datasets['train_domain']),
-        "input_shape": E.output_shape(), 'hiddens': [100]}
-    reg = DANReguralizer(feature_extractor=E, discriminator_config=discriminator_config)
-
-    model = DomainGeneralization(E, M, [reg], [alpha], optim, datasets)
-    logger = TensorBoardLogger("tb_logs", name="my_model")
-    trainer = Trainer(logger=logger)
+    model = DomainGeneralization(E, M, hparams)
+    mlf_logger = MLFlowLogger(experiment_name='default')
+    trainer = pl.Trainer(mlf_logger, gpus=1, max_epochs=10, early_stop_callback=False, checkpoint_callback=False)
 
     trainer.fit(model)

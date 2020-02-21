@@ -9,17 +9,19 @@ class _Reguralizer(nn.Module):
         self.loader = data.DataLoader(dataset, batch_size=batch_size, shuffle=True)
         return self.loader
 
-    def get_batch(self, as_variable=True, device='cpu'):
+    def get_batch(self, on_gpu=False):
         assert self.loader is not None, "Please set loader before call this function"
         X, y, d = self.loader.__iter__().__next__()
-        if as_variable:
-            X = X.float().to(device)
-            y = y.long().to(device)
-            d = d.long().to(device)
+        X = X.float()
+        y = y.long()
+        d = d.long()
+        if on_gpu:
+            X = X.cuda()
+            y = y.cuda()
+            d = d.cuda()
         if hasattr(self.D, 'label_linear'):
             X = [X, y]
         return X, y, d
 
     def set_optimizer(self, optimizer):
         self.optimizer = optimizer
-

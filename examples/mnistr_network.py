@@ -53,5 +53,3 @@ class Classifier(nn.Module):
 
     def forward(self, input_data):
         return self.class_classifier(input_data)
-
-

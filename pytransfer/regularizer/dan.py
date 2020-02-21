@@ -66,14 +66,13 @@ class DANReguralizer(_Reguralizer):
         d_loss = self.criterion(d_pred, d)
         return d_loss
 
-    def update(self):
+    def update(self, on_gpu=False):
         if self.stop_update:
             return None
 
-
         for _ in range(self.K):
             self.optimizer.zero_grad()
-            X, _, d = self.get_batch()
+            X, _, d = self.get_batch(on_gpu)
             d_loss = self.d_loss(self.feature_extractor(X), _, d)
             d_loss.backward()
             self.optimizer.step()
@@ -81,7 +80,7 @@ class DANReguralizer(_Reguralizer):
     def parameters(self):
         return self.D.parameters()
 
-    def _evaluate(self, loader, nb_batch, da_flag=False):
+    def _evaluate(self, loader, nb_batch, da_flag=False, device='cpu'):
         if nb_batch is None:
             nb_batch = len(loader)
         self.eval()
@@ -118,3 +117,13 @@ class DANReguralizer(_Reguralizer):
         result['loss'] = loss
         self.train()
         return result
+
+    def validation_step(self, batch, batch_idx):
+        X, y, d = batch
+        z = self.feature_extractor(X)
+        pred = self(z)
+        loss = self.loss(z, y, d).item()
+        d_hat = torch.argmax(pred, dim=1)
+        acc = torch.sum(d == d_hat).item() / (len(d) * 1.0)
+
+        return {'loss': loss, 'acc': acc}
