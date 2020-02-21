@@ -5,6 +5,11 @@ verify_ssl = true
 
 [dev-packages]
 jupyterlab = "*"
+pep8 = "*"
+autopep8 = "*"
+flake8 = "*"
+ipython = "*"
+pytorch-lightning = "*"
 
 [packages]
 wget = "*"
@@ -14,15 +19,12 @@ requests = "*"
 pillow = "*"
 imageio = "*"
 matplotlib = "*"
-sacred = "*"
 scikit-image = "*"
 statsmodels = "*"
 tensorflow = "==1.15.2"
 rarfile = "*"
 future = "*"
-ipython = "*"
 numpy = "*"
-pytorch-lightning = "*"
 pytransfer = {editable = true,path = "."}
 
 [requires]
