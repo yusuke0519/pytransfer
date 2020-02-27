@@ -64,16 +64,16 @@ class DomainGeneralization(pl.LightningModule):
         self.hparams = hparams
         self.datasets = prepare_datasets(
             MNISTR.get_disjoint_domains(self.hparams.test_domain), self.hparams.test_domain)
+        self.num_domains = len(MNISTR.get_disjoint_domains(self.hparams.test_domain))
         self.configure_regularizer()
         logging.info("Initialized")
 
     def configure_regularizer(self):
         self.regularizers = OrderedDict()
-        num_domains = len(MNISTR.get_disjoint_domains(self.hparams.test_domain))
         regs = []
         if self.hparams.reg_name == 'dan':
             discriminator_config = {
-                "num_domains": num_domains,
+                "num_domains": self.num_domains,
                 "input_shape": self.E.output_shape(), 'hiddens': self.hparams.D_hiddens}
             reg = DANReguralizer(feature_extractor=E, discriminator_config=discriminator_config)
             self.add_regularizer(reg.__class__.__name__, reg, self.hparams.reg_weight)
@@ -115,12 +115,6 @@ class DomainGeneralization(pl.LightningModule):
         y = self.M(z)
         return y
 
-    def training_step(self, batch, batch_idx):
-        self.update_regularizers()
-        X, y, d = batch
-        loss = self.loss(X.float(), y.long(), d.long())
-        return {'loss': loss, 'log': {'train_loss': loss}}
-
     def update_regularizers(self):
         for regularizer, _ in self.regularizers.values():
             regularizer.update(self.on_gpu)
@@ -132,6 +126,15 @@ class DomainGeneralization(pl.LightningModule):
         for regularizer, alpha in self.regularizers.values():
             loss += alpha * regularizer.loss(self.E(X), y, d)
         return loss
+
+    def training_step(self, batch, batch_idx):
+        self.update_regularizers()
+        X, y, d = batch
+        loss = self.loss(X.float(), y.long(), d.long())
+        return {'loss': loss, 'log': {'train_loss': loss}}
+
+    def training_end(self, outputs):
+        return (outputs)
 
     def validation_step(self, batch, batch_idx):
         result = OrderedDict()
@@ -159,6 +162,14 @@ class DomainGeneralization(pl.LightningModule):
                 avg_result[k] += v
         for k, v in outputs[0].items():
             avg_result[k] /= len(outputs)
+
+        logs = check_invariance(
+            self.E, self.datasets[0], 10, self.datasets[1], self.hparams.D_hiddens,
+            ['f_relu1', 'f_relu2', 'c_relu1'], self.num_domains, on_gpu=self.on_gpu,
+            lr=self.hparams.lr
+        )
+        for k, v in logs.items():
+            avg_result[k] = v
         return {'log': avg_result, 'val_loss': avg_result['y-loss']}
 
     def save(self, out, prefix=None):
@@ -217,6 +228,6 @@ if __name__ == '__main__':
 
     model = DomainGeneralization(E, M, hparams)
     mlf_logger = MLFlowLogger(experiment_name='default')
-    trainer = pl.Trainer(mlf_logger, gpus=1, max_epochs=10, early_stop_callback=False, checkpoint_callback=False)
+    trainer = pl.Trainer(mlf_logger, gpus=1, max_epochs=50, early_stop_callback=False, checkpoint_callback=False)
 
     trainer.fit(model)

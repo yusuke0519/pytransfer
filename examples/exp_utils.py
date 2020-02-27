@@ -1,151 +1,135 @@
 # # -*- coding: utf-8 -*-
-import random
-import numpy as np
-from sklearn import metrics
+from collections import OrderedDict
 import torch
-from torch import nn, optim
-from torch.autograd import Variable
+from torch import nn
 import torch.utils.data as data
 
-from pytransfer.datasets.base import Subset
-from pytransfer.regularizer.utils import Discriminator
+from torch.optim import RMSprop
 
 
-def domain_wise_splits(dataset, split_size, random_seed=1234):
-    datasets1 = []
-    datasets2 = []
-    dataset_class = dataset.__class__
-    domain_keys = dataset.domain_keys
-
-    for domain_key in domain_keys:
-        single_dataset = dataset.get_single_dataset(
-            domain_key, **dataset.domain_specific_params())
-        len_dataset = len(single_dataset)
-        train_size = int(len_dataset * split_size)
-        indices = range(len_dataset)
-        random.shuffle(indices)
-        indices = torch.LongTensor(indices)
-        dataset1 = Subset(single_dataset, indices[:train_size])
-        dataset2 = Subset(single_dataset, indices[train_size:])
-        datasets1.append(dataset1)
-        datasets2.append(dataset2)
-
-    datasets1 = dataset_class(
-        domain_keys=domain_keys,
-        datasets=datasets1, **dataset.domain_specific_params())
-    datasets2 = dataset_class(
-        domain_keys=domain_keys,
-        datasets=datasets2, **dataset.domain_specific_params())
-    return datasets1, datasets2
+def get_classifier(layers, input_size, dropout=0.5):
+    net = nn.Sequential()
+    for i, l in enumerate(layers):
+        module = nn.Linear(input_size, l)
+        net.add_module('fc{}'.format(i), module)
+        input_size = l
+        if i != len(layers)-1:
+            net.add_module('activation{}'.format(i), nn.ReLU(True))
+            net.add_module('dropout{}'.format(i), nn.Dropout(dropout))
+    return net
 
 
-def check_invariance(
-        E, dataset, num_iterations, valid_dataset, validation_size=0.5,
-        batch_size=128, lr=0.001, verbose=1, hiddens=None):
-    if hiddens is None:
-        hiddens = [100]
-    E.eval()
-    D = Discriminator(
-        len(dataset.domain_keys), E.output_shape(), hiddens=hiddens)
-    train_loader = data.DataLoader(dataset, batch_size=128, shuffle=True)
-    test_loader = data.DataLoader(valid_dataset, batch_size=128, shuffle=False)
-    optimizer = optim.RMSprop(D.parameters(), lr=lr, alpha=0.9)
+class Discriminator(nn.Module):
+    def __init__(self, input_shape, num_output, hiddens=None):
+        super(Discriminator, self).__init__()
+        if hiddens is None:
+            hiddens = []
+        if len(input_shape) == 4:
+            num_input = input_shape[1] * input_shape[2] * input_shape[3]
+        elif len(input_shape) == 2:
+            num_input = input_shape[1]
+        else:
+            raise Exception()
+        self.net = get_classifier(hiddens + [num_output], num_input)
+        self.activation = nn.LogSoftmax(dim=-1)
+
+    def forward(self, x):
+        x = x.view(x.size(0), -1)
+        return self.activation(self.net(x))
+
+
+def training_step(z, d, D, opt):
     criterion = nn.NLLLoss()
-    # ===== train =====
-    for i in range(1, num_iterations+1):
-        optimizer.zero_grad()
-        X, _, d = train_loader.__iter__().__next__()
-        X = X.float()
-        z = E(X).data
-        d = d.long()
-        d_pred = D(z)
-        loss = criterion(d_pred, d)
-
-        loss.backward()
-        optimizer.step()
-
-        if i % (num_iterations//10) == 0:
-            d_pred = np.argmax(d_pred.data.cpu().numpy(), axis=1)
-            acc = metrics.accuracy_score(d.data.cpu().numpy(), d_pred)
-            if verbose > 0:
-                print('(check invariance) iter: %.3f, Acc: %.3f' % (i, acc))
-
-    # ==== evaluate ====
-    result = {}
-
-    # ==== evaluate with validation====
-    ds = []
-    pred_ds = []
-    for X, _, d in test_loader:
-        X = X.float()
-        pred_d = D(E(X))
-        pred_d = np.argmax(pred_d.data.cpu(), axis=1)
-        ds.append(d.numpy())
-        pred_ds.append(pred_d.numpy())
-
-    d = np.concatenate(ds)
-    pred_d = np.concatenate(pred_ds)
-    acc = metrics.accuracy_score(d, pred_d)
-    E.train()
-    result['valid-domain-accuracy'] = acc
-    if verbose > 0:
-        print('(check invariance) Test Acc: %.3f' % (acc))
-    return result
+    opt.zero_grad()
+    pred_d = D(z.float().cuda())
+    loss = criterion(pred_d, d)
+    loss.backward()
+    opt.step()
 
 
-def da_check_invariance(
-        E, dataset, num_iterations, validation_size=0.5, batch_size=128,
-        lr=0.001, verbose=1, hiddens=None):
-    if hiddens is None:
-        hiddens = [100]
-    E.eval()
-    D = Discriminator(2, E.output_shape(), hiddens=hiddens).cuda()
-    # dataset
-    train_dataset, valid_dataset = domain_wise_splits(dataset, validation_size)
-    # dataloader
-    train_loader = data.DataLoader(
-        train_dataset, batch_size=batch_size, shuffle=True)
-    valid_loader = data.DataLoader(
-        valid_dataset, batch_size=batch_size, shuffle=True)
-    optimizer = optim.RMSprop(D.parameters(), lr=lr, alpha=0.9)
+def validation_step(z, d, D):
     criterion = nn.NLLLoss()
-    # ===== train =====
-    for i in range(1, num_iterations+1):
-        optimizer.zero_grad()
-        X, _, d = train_loader.__iter__().__next__()
-        X = Variable(X.float().cuda(), volatile=True)
-        z = Variable(E(X).data)
-        d = Variable(d.long().cuda())
-        d_pred = D(z)
-        loss = criterion(d_pred, d)
+    pred_d = D(z)
+    loss = criterion(pred_d, d).item()
+    d_hat = torch.argmax(pred_d, dim=1)
+    acc = torch.sum(d == d_hat).item() / (len(d) * 1.0)
+    return loss, acc
 
-        loss.backward()
-        optimizer.step()
 
-        if i % (num_iterations//10) == 0:
-            d_pred = np.argmax(d_pred.data.cpu().numpy(), axis=1)
-            acc = metrics.accuracy_score(d.data.cpu().numpy(), d_pred)
-            if verbose > 0:
-                print('(check invariance) iter: %.3f, Acc: %.3f' % (i, acc))
+def check_invariance(E, dataset, num_epoch, val_dataset,
+                     hiddens, module_names, num_domains,
+                     batch_size=128, lr=0.001, on_gpu=False):
+    torch.set_grad_enabled(True)
+    loader = data.DataLoader(dataset, batch_size=batch_size, shuffle=True)
+    val_loader = data.DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
 
-    # ==== evaluate ====
-    result = {}
+    activation = {}
 
-    # ==== evaluate with validation====
-    ds = []
-    pred_ds = []
-    for X, _, d in valid_loader:
-        X = Variable(X.float().cuda())
-        pred_d = D(E(X))
-        pred_d = np.argmax(pred_d.data.cpu(), axis=1)
-        ds.append(d.numpy())
-        pred_ds.append(pred_d.numpy())
+    def get_activation(name):
+        def hook(model, input, output):
+            activation[name] = output.detach()
+        return hook
 
-    d = np.concatenate(ds)
-    pred_d = np.concatenate(pred_ds)
-    acc = metrics.accuracy_score(d, pred_d)
-    E.train()
-    result['valid-domain-accuracy'] = acc
-    if verbose > 0:
-        print('(check invariance) Test Acc: %.3f' % (acc))
-    return result
+    for module in module_names:
+        getattr(E.feature, module).register_forward_hook(get_activation(module))
+    X, y, d = loader.__iter__().__next__()
+    if on_gpu:
+        X = X.cuda()
+        d = d.cuda()
+    E(X.float())
+
+    # prepare discriminator
+    D = {}
+    opt = {}
+    for module in module_names:
+        D[module] = Discriminator(activation[module].shape, num_domains, hiddens)
+        if on_gpu:
+            D[module].cuda()
+        opt[module] = RMSprop(D[module].parameters(), lr=lr, alpha=0.9)
+
+    # training
+    for i in range(num_epoch):
+        for X, y, d in loader:
+            if on_gpu:
+                X = X.cuda()
+                d = d.cuda()
+            E(X.float())
+            for module in module_names:
+                training_step(activation[module], d, D[module], opt[module])
+
+    # validation
+    outputs = []
+    result = OrderedDict()
+
+    for X, y, d in loader:
+        if on_gpu:
+            X = X.cuda()
+            d = d.cuda()
+        E(X.float())
+        for module in module_names:
+            loss, acc = validation_step(activation[module], d, D[module])
+            result['{}-loss-train'.format(module)] = loss
+            result['{}-acc-train'.format(module)] = acc
+        outputs.append(result)
+
+    for X, y, d in val_loader:
+        if on_gpu:
+            X = X.cuda()
+            d = d.cuda()
+        E(X.float())
+        for module in module_names:
+            loss, acc = validation_step(activation[module], d, D[module])
+            result['{}-loss'.format(module)] = loss
+            result['{}-acc'.format(module)] = acc
+        outputs.append(result)
+
+    avg_result = OrderedDict()
+    for k, v in outputs[0].items():
+        avg_result[k] = 0.0
+    for output in outputs:
+        for k, v in output.items():
+            avg_result[k] += v
+    for k, v in outputs[0].items():
+        avg_result[k] /= len(outputs)
+    torch.set_grad_enabled(False)
+    return avg_result
