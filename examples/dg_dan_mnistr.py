@@ -56,12 +56,17 @@ def prepare_datasets(train_domain, test_domain):
 
 
 class DomainGeneralization(pl.LightningModule):
-    def __init__(self, E, M, hparams):
+    def __init__(self, hparams):
         super(DomainGeneralization, self).__init__()
+        E = Encoder(MNISTR.get('input_shape'), hidden_size=400)
+        M = Classifier(MNISTR.get('num_classes'), E.output_shape())
+        M.num_classes = MNISTR.get('num_classes')
         self.E = E
         self.M = M
+
         self.criterion = nn.NLLLoss()
         self.hparams = hparams
+        self.D_hiddens = [int(x) for x in hparams.D_hiddens.split('-')]
         self.datasets = prepare_datasets(
             MNISTR.get_disjoint_domains(self.hparams.test_domain), self.hparams.test_domain)
         self.num_domains = len(MNISTR.get_disjoint_domains(self.hparams.test_domain))
@@ -74,8 +79,8 @@ class DomainGeneralization(pl.LightningModule):
         if self.hparams.reg_name == 'dan':
             discriminator_config = {
                 "num_domains": self.num_domains,
-                "input_shape": self.E.output_shape(), 'hiddens': self.hparams.D_hiddens}
-            reg = DANReguralizer(feature_extractor=E, discriminator_config=discriminator_config)
+                "input_shape": self.E.output_shape(), 'hiddens': self.D_hiddens}
+            reg = DANReguralizer(feature_extractor=self.E, discriminator_config=discriminator_config)
             self.add_regularizer(reg.__class__.__name__, reg, self.hparams.reg_weight)
             regs.append(reg)
         self.regs = nn.ModuleList(regs)
@@ -164,7 +169,7 @@ class DomainGeneralization(pl.LightningModule):
             avg_result[k] /= len(outputs)
 
         logs = check_invariance(
-            self.E, self.datasets[0], 10, self.datasets[1], self.hparams.D_hiddens,
+            self.E, self.datasets[0], 10, self.datasets[1], self.D_hiddens,
             ['f_relu1', 'f_relu2', 'c_relu1'], self.num_domains, on_gpu=self.on_gpu,
             lr=self.hparams.lr
         )
@@ -172,15 +177,42 @@ class DomainGeneralization(pl.LightningModule):
             avg_result[k] = v
         return {'log': avg_result, 'val_loss': avg_result['y-loss']}
 
-    def save(self, out, prefix=None):
-        names = ['E.pth', 'M.pth']
-        if prefix is not None:
-            names = [prefix + '-' + x for x in names]
-        names = [os.path.join(out, x) for x in names]
+    def test_step(self, batch, batch_idx):
+        result = OrderedDict()
+        X, y, d = batch
+        X = X.float()
+        pred_y = self(X)
+        criterion = nn.NLLLoss()
+        loss = criterion(pred_y, y).item()
+        y_hat = torch.argmax(pred_y, dim=1)
+        acc = torch.sum(y == y_hat).item() / (len(y) * 1.0)
+        result['y-loss'] = loss
+        result['y-acc'] = acc
 
-        for net, name in zip([self.E, self.M], names):
-            torch.save(net.state_dict(), name)
-        return names
+        for name, (reg, _) in iteritems(self.regularizers):
+            for k, v in iteritems(reg.validation_step((X, y, d), batch_idx)):
+                result['{}-{}'.format(name, k)] = v
+        return result
+
+    def test_end(self, outputs):
+        avg_result = OrderedDict()
+        for k, v in outputs[0].items():
+            avg_result[k] = 0.0
+        for output in outputs:
+            for k, v in output.items():
+                avg_result[k] += v
+        for k, v in outputs[0].items():
+            avg_result[k] /= len(outputs)
+
+        logs = check_invariance(
+            self.E, self.datasets[0], 10, self.datasets[1], self.D_hiddens,
+            ['f_relu1', 'f_relu2', 'c_relu1'], self.num_domains, on_gpu=self.on_gpu,
+            lr=self.hparams.lr
+        )
+        for k, v in logs.items():
+            avg_result[k] = v
+        self.test_result = avg_result
+        return {'log': {'test-' + k: v for k, v in avg_result.items()}, 'test_loss': avg_result['y-loss']}
 
     @staticmethod
     def add_model_specific_args(parent_parser):
@@ -193,41 +225,52 @@ class DomainGeneralization(pl.LightningModule):
         # regularizer
         parser.add_argument('--reg_name', default='dan', type=str)
         parser.add_argument('--reg_weight', default=1.0, type=float)
-        parser.add_argument('--D_hiddens', default=[400], nargs='*', type=int)
+        parser.add_argument('--D_hiddens', default='400', type=str)
 
         return parser
 
 
 if __name__ == '__main__':
     from pytorch_lightning.logging import MLFlowLogger
+    from pytorch_lightning.callbacks import ModelCheckpoint
+    import mlflow
     from mlflow.tracking.client import MlflowClient
     from mlflow.entities import ViewType
+
+    EXPERIMENT_NAME = 'Default'
 
     print("Execute example")
     parser = ArgumentParser(add_help=False)
     parser.add_argument('--batch_size', default=128, type=int)
     parser.add_argument('--lr', default=0.001, type=float)
+    parser.add_argument('--epoch', default=5, type=int)
 
     parser = DomainGeneralization.add_model_specific_args(parser)
     hparams = parser.parse_args()
 
-    print(hparams)
     query = ' and '.join(
         ['params.{}="{}"'.format(k, str(v)) for k, v in vars(hparams).items()] + ['attributes.status="FINISHED"'])
-    print(query)
-    runs = MlflowClient().search_runs(experiment_ids=["1"], filter_string=query, run_view_type=ViewType.ALL)
+    runs = MlflowClient().search_runs(
+        experiment_ids=[mlflow.get_experiment_by_name(EXPERIMENT_NAME).experiment_id],
+        filter_string=query, run_view_type=ViewType.ALL
+    )
 
     if len(runs) > 0:
         logging.info("The task has been already finished")
 
     # Parameters
     print("Build model...")
-    E = Encoder(MNISTR.get('input_shape'), hidden_size=400)
-    M = Classifier(MNISTR.get('num_classes'), E.output_shape())
-    M.num_classes = MNISTR.get('num_classes')
-
-    model = DomainGeneralization(E, M, hparams)
-    mlf_logger = MLFlowLogger(experiment_name='default')
-    trainer = pl.Trainer(mlf_logger, gpus=1, max_epochs=50, early_stop_callback=False, checkpoint_callback=False)
+    model = DomainGeneralization(hparams)
+    mlf_logger = MLFlowLogger(experiment_name=EXPERIMENT_NAME)
+    logging.info("MLF Run ID: {}".format(mlf_logger.run_id))
+    checkpoint = ModelCheckpoint(
+            filepath=os.path.join(os.getcwd(), EXPERIMENT_NAME, str(mlf_logger.run_id)),
+            save_top_k=-1,
+    )
+    trainer = pl.Trainer(
+        mlf_logger, gpus=1,
+        max_epochs=hparams.epoch, early_stop_callback=False, checkpoint_callback=checkpoint)
 
     trainer.fit(model)
+    trainer.test()
+    print(model.test_result)
