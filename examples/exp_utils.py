@@ -41,7 +41,7 @@ class Discriminator(nn.Module):
 def training_step(z, d, D, opt):
     criterion = nn.NLLLoss()
     opt.zero_grad()
-    pred_d = D(z.float().cuda())
+    pred_d = D(z)
     loss = criterion(pred_d, d)
     loss.backward()
     opt.step()
@@ -95,7 +95,10 @@ def check_invariance(E, dataset, num_epoch, val_dataset,
                 d = d.cuda()
             E(X.float())
             for module in module_names:
-                training_step(activation[module], d, D[module], opt[module])
+                z = activation[module].float()
+                if on_gpu:
+                    z = z.cuda()
+                training_step(z, d, D[module], opt[module])
 
     # validation
     outputs = []
