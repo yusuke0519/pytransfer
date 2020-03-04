@@ -36,7 +36,7 @@ def domain_wise_splits(dataset, split_size, random_seed=1234):
         len_dataset = len(single_dataset)
         train_size = int(len_dataset * split_size)
         indices = list(range(len_dataset))
-        random.shuffle(indices)
+        random.Random(1234).shuffle(indices)
         indices = torch.LongTensor(indices)
         dataset1, dataset2 = Subset(single_dataset, indices[:train_size]), Subset(single_dataset, indices[train_size:])
         datasets1.append(dataset1)
@@ -220,7 +220,7 @@ class DomainGeneralization(pl.LightningModule):
 
         # dataset
         parser.add_argument('--dataset_name', default='mnistr', type=str)
-        parser.add_argument('--test_domain', default='M75', type=str)
+        parser.add_argument('--test_domain', default='M76', type=str)
 
         # regularizer
         parser.add_argument('--reg_name', default='dan', type=str)
@@ -230,6 +230,19 @@ class DomainGeneralization(pl.LightningModule):
         return parser
 
 
+def check_finish(hparams, experiment_name):
+    query = ' and '.join(
+        ['params.{}="{}"'.format(k, str(v)) for k, v in vars(hparams).items()])
+    experiment = mlflow.get_experiment_by_name(experiment_name)
+    if experiment is None:
+        return False
+    finished_runs = MlflowClient().search_runs(
+        experiment_ids=[mlflow.get_experiment_by_name(experiment_name).experiment_id],
+        filter_string=query, run_view_type=ViewType.ALL
+    )
+    return len(finished_runs) > 0
+
+
 if __name__ == '__main__':
     from pytorch_lightning.logging import MLFlowLogger
     from pytorch_lightning.callbacks import ModelCheckpoint
@@ -237,40 +250,46 @@ if __name__ == '__main__':
     from mlflow.tracking.client import MlflowClient
     from mlflow.entities import ViewType
 
-    EXPERIMENT_NAME = 'Default'
+    EXPERIMENT_NAME = 'Test'
 
     print("Execute example")
     parser = ArgumentParser(add_help=False)
     parser.add_argument('--batch_size', default=128, type=int)
     parser.add_argument('--lr', default=0.001, type=float)
     parser.add_argument('--epoch', default=5, type=int)
+    parser.add_argument('--seed', default=1234, type=int)
 
     parser = DomainGeneralization.add_model_specific_args(parser)
     hparams = parser.parse_args()
 
-    query = ' and '.join(
-        ['params.{}="{}"'.format(k, str(v)) for k, v in vars(hparams).items()] + ['attributes.status="FINISHED"'])
-    runs = MlflowClient().search_runs(
-        experiment_ids=[mlflow.get_experiment_by_name(EXPERIMENT_NAME).experiment_id],
-        filter_string=query, run_view_type=ViewType.ALL
-    )
+    # Check if the task if already finished
+    flag = check_finish(hparams, EXPERIMENT_NAME)
+    if flag:
+        logging.info("The task has been already finished or running")
+        logging.info("Skip this run")
+        logging.info(hparams)
+    else:
+        logging.info("Execute this run")
+        logging.info(hparams)
+        random.seed(hparams.seed)
+        torch.manual_seed(hparams.seed)
+        torch.cuda.manual_seed(hparams.seed)
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+        # Parameters
+        print("Build model...")
+        model = DomainGeneralization(hparams)
+        mlf_logger = MLFlowLogger(experiment_name=EXPERIMENT_NAME)
+        # mlf_logger = MLFlowLogger(experiment_name=EXPERIMENT_NAME, tracking_uri="s3://log")
+        logging.info("MLF Run ID: {}".format(mlf_logger.run_id))
+        checkpoint = ModelCheckpoint(
+                filepath=os.path.join(os.getcwd(), EXPERIMENT_NAME, str(mlf_logger.run_id)),
+                save_top_k=-1,
+        )
+        trainer = pl.Trainer(
+            mlf_logger, gpus=1,
+            max_epochs=hparams.epoch, early_stop_callback=False, checkpoint_callback=checkpoint)
 
-    if len(runs) > 0:
-        logging.info("The task has been already finished")
-
-    # Parameters
-    print("Build model...")
-    model = DomainGeneralization(hparams)
-    mlf_logger = MLFlowLogger(experiment_name=EXPERIMENT_NAME)
-    logging.info("MLF Run ID: {}".format(mlf_logger.run_id))
-    checkpoint = ModelCheckpoint(
-            filepath=os.path.join(os.getcwd(), EXPERIMENT_NAME, str(mlf_logger.run_id)),
-            save_top_k=-1,
-    )
-    trainer = pl.Trainer(
-        mlf_logger, gpus=1,
-        max_epochs=hparams.epoch, early_stop_callback=False, checkpoint_callback=checkpoint)
-
-    trainer.fit(model)
-    trainer.test()
-    print(model.test_result)
+        trainer.fit(model)
+        trainer.test()
+        print(model.test_result)
