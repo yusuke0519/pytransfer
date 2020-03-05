@@ -220,7 +220,7 @@ class DomainGeneralization(pl.LightningModule):
 
         # dataset
         parser.add_argument('--dataset_name', default='mnistr', type=str)
-        parser.add_argument('--test_domain', default='M76', type=str)
+        parser.add_argument('--test_domain', default='M75', type=str)
 
         # regularizer
         parser.add_argument('--reg_name', default='dan', type=str)
@@ -279,8 +279,8 @@ if __name__ == '__main__':
         # Parameters
         print("Build model...")
         model = DomainGeneralization(hparams)
-        mlf_logger = MLFlowLogger(experiment_name=EXPERIMENT_NAME)
-        # mlf_logger = MLFlowLogger(experiment_name=EXPERIMENT_NAME, tracking_uri="s3://log")
+        # mlf_logger = MLFlowLogger(experiment_name=EXPERIMENT_NAME)
+        mlf_logger = MLFlowLogger(experiment_name=EXPERIMENT_NAME, tracking_uri="s3://log")
         logging.info("MLF Run ID: {}".format(mlf_logger.run_id))
         checkpoint = ModelCheckpoint(
                 filepath=os.path.join(os.getcwd(), EXPERIMENT_NAME, str(mlf_logger.run_id)),
