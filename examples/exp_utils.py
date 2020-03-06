@@ -53,7 +53,9 @@ def validation_step(z, d, D):
     loss = criterion(pred_d, d).item()
     d_hat = torch.argmax(pred_d, dim=1)
     acc = torch.sum(d == d_hat).item() / (len(d) * 1.0)
-    return loss, acc
+    d_mean = torch.exp(pred_d).mean(dim=0)
+    d_ent_reg = torch.sum(-d_mean*torch.log(d_mean))
+    return loss, acc, d_ent_reg
 
 
 def check_invariance(E, dataset, num_epoch, val_dataset,
@@ -110,9 +112,10 @@ def check_invariance(E, dataset, num_epoch, val_dataset,
             d = d.cuda()
         E(X.float())
         for module in module_names:
-            loss, acc = validation_step(activation[module], d, D[module])
+            loss, acc, ent = validation_step(activation[module], d, D[module])
             result['{}-loss-train'.format(module)] = loss
             result['{}-acc-train'.format(module)] = acc
+            result['{}-acc-ent'.format(module)] = ent
         outputs.append(result)
 
     for X, y, d in val_loader:
@@ -121,9 +124,10 @@ def check_invariance(E, dataset, num_epoch, val_dataset,
             d = d.cuda()
         E(X.float())
         for module in module_names:
-            loss, acc = validation_step(activation[module], d, D[module])
+            loss, acc, ent = validation_step(activation[module], d, D[module])
             result['{}-loss'.format(module)] = loss
             result['{}-acc'.format(module)] = acc
+            result['{}-ent'.format(module)] = ent
         outputs.append(result)
 
     avg_result = OrderedDict()

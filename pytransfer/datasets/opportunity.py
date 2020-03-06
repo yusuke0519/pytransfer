@@ -44,8 +44,8 @@ class _SingleUserSingleADL(data.Dataset):
         col_names = load_col_names(self.path)
 
         file_format = os.path.join(self.path, "{which}-{adl_id}.dat")
-        df = pd.DataFrame.from_csv(
-            file_format.format(which=self.domain_key, adl_id=adl_id), sep=' ', header=None)
+        df = pd.read_csv(
+            file_format.format(which=self.domain_key, adl_id=adl_id), sep=' ', header=None, index_col=0)
 
         df.columns = [col_names[1:]]
         tgt_columns = [
@@ -106,7 +106,7 @@ class OppG(DomainDatasetBase):
         self.interval = interval
         self.l_sample = l_sample
         super(OppG, self).__init__(domain_keys, require_domain, datasets=datasets)
-    
+
     def get_single_dataset(self, domain_key, **kwargs):
         datasets = []
         for adl_id in self.SingleDataset.all_adls:

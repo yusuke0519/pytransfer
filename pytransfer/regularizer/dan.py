@@ -1,7 +1,7 @@
 # # -*- coding: utf-8 -*-
-from collections import OrderedDict
-import numpy as np
-from sklearn import metrics
+# from collections import OrderedDict
+# import numpy as np
+# from sklearn import metrics
 
 import torch
 from torch import nn
@@ -22,7 +22,7 @@ class DANReguralizer(_Reguralizer):
 
     """
 
-    def __init__(self, feature_extractor, D=None, discriminator_config=None, K=1):
+    def __init__(self, feature_extractor, D=None, discriminator_config=None, K=1, max_ent=False):
         """
         Initialize dan base regularizer
 
@@ -47,6 +47,7 @@ class DANReguralizer(_Reguralizer):
         self.criterion = nn.NLLLoss()
         self.loader = None
         self.feature_extractor = feature_extractor
+        self.max_ent = max_ent
 
     def forward(self, z):
         return self.D(z)
@@ -56,6 +57,11 @@ class DANReguralizer(_Reguralizer):
         """
         d_pred = self(z)
         d_loss = self.criterion(d_pred, d)
+        if self.max_ent:
+            d_mean = torch.exp(d_pred).mean(dim=0)
+            d_ent_reg = torch.sum(-d_mean*torch.log(d_mean))
+            d_loss += d_ent_reg
+
         return -1 * d_loss
 
     def d_loss(self, z, _, d):
@@ -79,44 +85,6 @@ class DANReguralizer(_Reguralizer):
     def parameters(self):
         return self.D.parameters()
 
-    def _evaluate(self, loader, nb_batch, da_flag=False, device='cpu'):
-        if nb_batch is None:
-            nb_batch = len(loader)
-        self.eval()
-        targets = []
-        preds = []
-        loss = 0
-        for i, (X, y, d) in enumerate(loader):
-            with torch.no_grad():
-                X = X.float()
-                target = d.long()
-                if not da_flag:
-                    if len(np.unique(target.data.cpu())) <= 1:
-                        continue
-                z = self.feature_extractor(X)
-                pred = self(z)
-                loss += self.loss(z, y, target).item()
-                pred = np.argmax(pred.data.cpu(), axis=1)
-                targets.append(d.numpy())
-                preds.append(pred.numpy())
-                if i+1 == nb_batch:
-                    break
-        loss /= nb_batch
-
-        result = OrderedDict()
-        if len(targets) == 0:
-            result['accuracy'] = np.nan
-            result['f1macro'] = np.nan
-            result['loss'] = np.nan
-            return result
-        target = np.concatenate(targets)
-        pred = np.concatenate(preds)
-        result['accuracy'] = metrics.accuracy_score(target, pred)
-        result['f1macro'] = metrics.f1_score(target, pred, average='macro')
-        result['loss'] = loss
-        self.train()
-        return result
-
     def validation_step(self, batch, batch_idx):
         X, y, d = batch
         z = self.feature_extractor(X)
@@ -124,5 +92,7 @@ class DANReguralizer(_Reguralizer):
         loss = self.loss(z, y, d).item()
         d_hat = torch.argmax(pred, dim=1)
         acc = torch.sum(d == d_hat).item() / (len(d) * 1.0)
+        d_mean = torch.exp(pred).mean(dim=0)
+        d_ent_reg = torch.sum(-d_mean*torch.log(d_mean))
 
-        return {'loss': loss, 'acc': acc}
+        return {'loss': loss, 'acc': acc, 'entropy': d_ent_reg}
