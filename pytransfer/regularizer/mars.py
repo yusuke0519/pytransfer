@@ -27,7 +27,7 @@ class EnsembleDAN(_Reguralizer):
         super(EnsembleDAN, self).__init__()
 
         discriminator_config['use_softmax'] = False
-        self.D = [Discriminator(**discriminator_config).cuda() for i in range(num_discriminator)]
+        self.D = [Discriminator(**discriminator_config) for i in range(num_discriminator)]
         self.num_output = self.D[0].num_domains
 
         self.feature_extractor = feature_extractor
@@ -54,7 +54,7 @@ class EnsembleDAN(_Reguralizer):
             for _D in self.D:
                 d_pred = nn.functional.log_softmax(_D(z), dim=1)
                 loss += nn.NLLLoss()(d_pred, d)
-                kl_loss = nn.KLDivLoss(reduction="sum")(d_pred, mean_prob)
+                kl_loss = nn.KLDivLoss(reduction="sum")(d_pred, torch.exp(mean_prob))
                 loss -= self.KL_weight * kl_loss
             loss.backward()
             self.optimizer.step()
