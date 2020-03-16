@@ -27,14 +27,14 @@ class EnsembleDAN(_Reguralizer):
         super(EnsembleDAN, self).__init__()
 
         discriminator_config['use_softmax'] = False
-        self.D = [Discriminator(**discriminator_config) for i in range(num_discriminator)]
+        self.D = nn.ModuleList([Discriminator(**discriminator_config) for i in range(num_discriminator)])
         self.num_output = self.D[0].num_domains
 
         self.feature_extractor = feature_extractor
         self.K = K
         self.criterion = nn.NLLLoss()
         self.loader = None
-        self.KL_weight = 1.0
+        self.KL_weight = KL_weight
 
     def forward(self, z, d):
         return -1 * (nn.NLLLoss()(self.mean_prob(z), d))
@@ -81,7 +81,7 @@ class EnsembleDAN(_Reguralizer):
             loss = nn.NLLLoss()(d_pred, d)
             d_hat = torch.argmax(d_pred, dim=1)
             acc = torch.sum(d == d_hat).item() / (len(d) * 1.0)
-            kl_loss = nn.KLDivLoss(reduction="sum")(d_pred, mean_prob)
+            kl_loss = nn.KLDivLoss(reduction="sum")(d_pred, mean_prob.exp())
             d_mean = torch.exp(d_pred).mean(dim=0)
             d_ent_reg = torch.sum(-d_mean*torch.log(d_mean))
             _result = {
