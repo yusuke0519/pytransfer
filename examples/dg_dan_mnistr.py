@@ -25,6 +25,7 @@ from pytransfer import datasets
 # from mnistr_network import Encoder, Classifier
 import NNs
 from pytransfer.regularizer.dan import DANReguralizer
+from pytransfer.regularizer.mars import EnsembleDAN
 
 
 def domain_wise_splits(dataset, split_size, random_seed=1234):
@@ -99,6 +100,14 @@ class DomainGeneralization(pl.LightningModule):
             reg = DANReguralizer(feature_extractor=self.E, discriminator_config=discriminator_config, max_ent=True)
             self.add_regularizer(reg.__class__.__name__, reg, self.hparams.reg_weight)
             regs.append(reg)
+        elif self.hparams.reg_name == 'ensemble':
+            discriminator_config = {
+                "num_domains": self.num_domains,
+                "input_shape": self.E.output_shape(), 'hiddens': self.D_hiddens}
+            reg = EnsembleDAN(
+                feature_extractor=self.E, discriminator_config=discriminator_config, num_discriminator=5)
+            self.add_regularizer(reg.__class__.__name__, reg, self.hparams.reg_weight)
+            regs.append(reg)
         self.regs = nn.ModuleList(regs)
 
     def add_regularizer(self, name, regularizer, alpha):
@@ -145,7 +154,7 @@ class DomainGeneralization(pl.LightningModule):
         y_loss = self.criterion(yhat, y)
         loss = y_loss
         for regularizer, alpha in self.regularizers.values():
-            loss += alpha * regularizer.loss(self.E(X), y, d)
+            loss += alpha * regularizer(self.E(X), d)
         return loss
 
     def training_step(self, batch, batch_idx):
@@ -252,13 +261,14 @@ if __name__ == '__main__':
     parser.add_argument('--lr', default=0.001, type=float)
     parser.add_argument('--epoch', default=5, type=int)
     parser.add_argument('--seed', default=1234, type=int)
+    parser.add_argument('-F', action='store_true')
 
     parser = DomainGeneralization.add_model_specific_args(parser)
     hparams = parser.parse_args()
 
     # Check if the task if already finished
     flag = check_finish(hparams, EXPERIMENT_NAME)
-    if flag:
+    if flag and not hparams.F:
         logging.info("The task has been already finished or running")
         logging.info("Skip this run")
         logging.info(hparams)

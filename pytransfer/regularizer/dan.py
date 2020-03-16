@@ -49,27 +49,19 @@ class DANReguralizer(_Reguralizer):
         self.feature_extractor = feature_extractor
         self.max_ent = max_ent
 
-    def forward(self, z):
-        return self.D(z)
-
-    def loss(self, z, _, d):
-        """ Loss for the encoder update
-        """
-        d_pred = self(z)
+    def forward(self, z, d):
+        d_pred = self.D(z)
         d_loss = self.criterion(d_pred, d)
         if self.max_ent:
             d_mean = torch.exp(d_pred).mean(dim=0)
             d_ent_reg = torch.sum(-d_mean*torch.log(d_mean))
             d_loss += d_ent_reg
-
         return -1 * d_loss
 
-    def d_loss(self, z, _, d):
+    def d_loss(self, z, d):
         """ Loss for the discriminator update
         """
-        d_pred = self(z)
-        d_loss = self.criterion(d_pred, d)
-        return d_loss
+        return -1 * self(z, d)
 
     def update(self, on_gpu=False):
         if self.stop_update:
@@ -78,7 +70,7 @@ class DANReguralizer(_Reguralizer):
         for _ in range(self.K):
             self.optimizer.zero_grad()
             X, _, d = self.get_batch(on_gpu)
-            d_loss = self.d_loss(self.feature_extractor(X), _, d)
+            d_loss = self.d_loss(self.feature_extractor(X), d)
             d_loss.backward()
             self.optimizer.step()
 
@@ -88,11 +80,11 @@ class DANReguralizer(_Reguralizer):
     def validation_step(self, batch, batch_idx):
         X, y, d = batch
         z = self.feature_extractor(X)
-        pred = self(z)
-        loss = self.loss(z, y, d).item()
+        pred = self.D(z)
+        loss = self(z, d).item()
         d_hat = torch.argmax(pred, dim=1)
         acc = torch.sum(d == d_hat).item() / (len(d) * 1.0)
         d_mean = torch.exp(pred).mean(dim=0)
-        d_ent_reg = torch.sum(-d_mean*torch.log(d_mean))
+        d_ent_reg = torch.sum(-d_mean*torch.log(d_mean)).item()
 
         return {'loss': loss, 'acc': acc, 'entropy': d_ent_reg}

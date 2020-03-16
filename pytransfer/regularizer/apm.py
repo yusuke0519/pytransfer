@@ -8,7 +8,6 @@ from torch import nn
 from torch.autograd import Variable
 from torch.utils import data
 from __init__ import DANReguralizer
-from dan import Discriminator
 
 
 class MovingAttributePerceptionLoss(DANReguralizer):
@@ -20,15 +19,15 @@ class MovingAttributePerceptionLoss(DANReguralizer):
     learner : instance of learner
 
     """
-    def __init__(self, learner, D=None, discriminator_config=None, distance='KL', decay=0.7, K=1):
-        super(MovingAttributePerceptionLoss, self).__init__(learner, discriminator_config=discriminator_config, K=K)
+    def __init__(self, feature_extractor, D=None, discriminator_config=None, distance='KL', decay=0.7, K=1):
+        super(MovingAttributePerceptionLoss, self).__init__(
+            feature_extractor, discriminator_config=discriminator_config, K=K)
         self.distance = distance
         self.decay = decay
-        self.learner = learner
 
     def preprocess(self, dataset):
         self.initialize_centroids(dataset)
-    
+
     def set_loader(self, dataset, batch_size):
         super(MovingAttributePerceptionLoss, self).set_loader(dataset, batch_size)
         self.preprocess(dataset)
@@ -56,9 +55,9 @@ class MovingAttributePerceptionLoss(DANReguralizer):
             new_centroid = z[_filter].mean(axis=0)
             centroids[_filter] = new_centroid
         self.centroids = centroids
-    
+
     def update_centroids(self, X, y, d):
-        g = self.perceptual(self.learner.E(X))
+        g = self.perceptual(self.feature_extractor(X))
         y = y.data.cpu()
         d = d.data.cpu()
         for j in np.unique(d):
@@ -85,7 +84,7 @@ class MovingAttributePerceptionLoss(DANReguralizer):
 
     def forward(self, z, y, d):
         g = self.perceptual(z)
-        p_tgt = Variable(self.get_tgt_centroids(y, d, 'n')).float().cuda()
+        p_tgt = self.get_tgt_centroids(y, d, 'n')).float()
         g_log_softmax_repeat = torch.transpose(nn.functional.log_softmax(g, dim=-1).repeat(p_tgt.shape[1], 1, 1), 0, 1)
         return self.e_criterion(g_log_softmax_repeat, nn.functional.softmax(p_tgt, dim=-1)).sum(dim=-1).mean()
 
@@ -94,64 +93,40 @@ class MovingAttributePerceptionLoss(DANReguralizer):
         return nn.KLDivLoss(reduce=False)
 
     def loss(self, X, y, d):
-        z = self.learner.E(X)
+        z = self.feature_extractorE(X)
         return self(z, y, d)
 
     def perceptual(self, z):
         return self.D.preactivation(z)
+
     def parameters(self):
         return self.D.parameters()
-    
-    def _evaluate(self, loader, nb_batch):
-        if nb_batch is None:
-            nb_batch = len(loader)
-        self.eval()
-        targets = []
-        preds = []
-        loss = 0
-        for i, (X, y, d) in enumerate(loader):
-            X = Variable(X.float().cuda(), volatile=True)
-            y_target = Variable(y.long().cuda(), volatile=True)
-            target = Variable(d.long().cuda(), volatile=True)
-            if len(np.unique(target.data.cpu())) <= 1:
-                continue
-            z = self.learner.E(X)
-            pred = self.D(z)
-            loss += self.loss(X, y_target, target).data[0]
-            pred = np.argmax(pred.data.cpu(), axis=1)
-            targets.append(d.numpy())
-            preds.append(pred.numpy())
-            if i+1 == nb_batch:
-                break
-        loss /= nb_batch
 
-        result = OrderedDict()
-        if len(targets) == 0:
-            result['accuracy'] = np.nan
-            result['f1macro'] = np.nan
-            result['loss'] = np.nan
-            return result
-        target = np.concatenate(targets)
-        pred = np.concatenate(preds)
-        result['accuracy'] = metrics.accuracy_score(target, pred)
-        result['f1macro'] = metrics.f1_score(target, pred, average='macro')
-        result['loss'] = loss
-        self.train()
-        return result
-    
-    def update(self):
-	if self.stop_update:
-	    return None
+    def update(self, on_gpu=False):
+        if self.stop_update:
+            return None
 
         for _ in range(self.K):
             self.optimizer.zero_grad()
-            X, _, d = self.get_batch()
+            X, _, d = self.get_batch(on_gpu)
             d_loss = self.d_loss(X, _, d)
             d_loss.backward()
             self.optimizer.step()
-    
-        X, y, d = self.get_batch()
+
+        X, y, d = self.get_batch(on_gpu)
         self.update_centroids(X, y, d)
+
+    def validation_step(self, batch, batch_idx):
+        X, y, d = batch
+        z = self.feature_extractor(X)
+        pred = self(z)
+        loss = self.loss(z, y, d).item()
+        d_hat = torch.argmax(pred, dim=1)
+        acc = torch.sum(d == d_hat).item() / (len(d) * 1.0)
+        d_mean = torch.exp(pred).mean(dim=0)
+        d_ent_reg = torch.sum(-d_mean*torch.log(d_mean))
+
+        return {'loss': loss, 'acc': acc, 'entropy': d_ent_reg}
 
 
 class SemanticAlignedAttributePerceptionLoss(MovingAttributePerceptionLoss):
@@ -183,6 +158,7 @@ class SemanticAlignedAttributePerceptionLoss(MovingAttributePerceptionLoss):
         for i, j in itertools.product(range(num_classes), range(num_domains)):
             _filter = (y == i) & (d == j)
             new_centroid = z[_filter].mean(axis=0)
+            centroids[_filter] = new_centroid
         self.centroids = centroids
 
     def update_centroids(self, X, y, d):
@@ -194,7 +170,7 @@ class SemanticAlignedAttributePerceptionLoss(MovingAttributePerceptionLoss):
             if (_filter.numpy() == 1).sum() != 0:
                 new_centroid = g.data.cpu().numpy()[_filter.numpy() == 1].mean(axis=0)
                 self.centroids[i, j] = self.decay * self.centroids[i, j] + (1-self.decay) * new_centroid
-    
+
     def get_tgt_centroids(self, y, d, filter_mode):
         """Return target centroids with based on the touple of (y, d, filter_mode)
 
