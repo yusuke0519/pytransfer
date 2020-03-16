@@ -109,3 +109,6 @@ venv.bak/
 .idea/vcs.xml
 .vscode/settings.json
 Pipfile.lock
+*~
+*.swp
+
