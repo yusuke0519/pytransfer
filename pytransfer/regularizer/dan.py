@@ -55,7 +55,7 @@ class DANReguralizer(_Reguralizer):
         if self.max_ent:
             d_mean = torch.exp(d_pred).mean(dim=0)
             d_ent_reg = torch.sum(-d_mean*torch.log(d_mean))
-            d_loss += d_ent_reg
+            return -1 * d_ent_reg
         return -1 * d_loss
 
     def d_loss(self, z, d):

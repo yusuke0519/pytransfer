@@ -20,9 +20,7 @@ import logging
 import pytorch_lightning as pl
 
 from pytransfer.datasets.base import Subset
-# from pytransfer.datasets import MNISTR
 from pytransfer import datasets
-# from mnistr_network import Encoder, Classifier
 import NNs
 from pytransfer.regularizer.dan import DANReguralizer
 from pytransfer.regularizer.mars import EnsembleDAN
@@ -71,12 +69,12 @@ class DomainGeneralization(pl.LightningModule):
 
         if hparams.dataset_name == 'mnistr':
             self.val_layers = ['f_relu1', 'f_relu2', 'c_relu1']
-        elif hparams.dataset_name in ['oppG', 'oppL']:
+        elif hparams.dataset_name in ['oppG', 'oppL', 'usc']:
             self.val_layers = ['f_relu1', 'f_relu2', 'f_relu3', 'c_relu1']
 
         self.criterion = nn.NLLLoss()
         self.hparams = hparams
-        self.D_hiddens = [int(x) for x in hparams.D_hiddens.split('-')]
+        self.D_hiddens = [int(x) for x in hparams.D_hiddens.split('-')] if hparams.D_hiddens != '' else []
         self.datasets = prepare_datasets(
             dataset_cls.get_disjoint_domains(self.hparams.test_domain), self.hparams.test_domain, dataset_cls)
         self.num_domains = len(dataset_cls.get_disjoint_domains(self.hparams.test_domain))
@@ -91,14 +89,14 @@ class DomainGeneralization(pl.LightningModule):
                 "num_domains": self.num_domains,
                 "input_shape": self.E.output_shape(), 'hiddens': self.D_hiddens}
             reg = DANReguralizer(feature_extractor=self.E, discriminator_config=discriminator_config)
-            self.add_regularizer(reg.__class__.__name__, reg, self.hparams.reg_weight)
+            self.add_regularizer('D', reg, self.hparams.reg_weight)
             regs.append(reg)
         elif self.hparams.reg_name == 'dan-ent':
             discriminator_config = {
                 "num_domains": self.num_domains,
                 "input_shape": self.E.output_shape(), 'hiddens': self.D_hiddens}
             reg = DANReguralizer(feature_extractor=self.E, discriminator_config=discriminator_config, max_ent=True)
-            self.add_regularizer(reg.__class__.__name__, reg, self.hparams.reg_weight)
+            self.add_regularizer('D', reg, self.hparams.reg_weight)
             regs.append(reg)
         elif self.hparams.reg_name == 'ensemble':
             discriminator_config = {
@@ -106,7 +104,7 @@ class DomainGeneralization(pl.LightningModule):
                 "input_shape": self.E.output_shape(), 'hiddens': self.D_hiddens}
             reg = EnsembleDAN(
                 feature_extractor=self.E, discriminator_config=discriminator_config, num_discriminator=5)
-            self.add_regularizer(reg.__class__.__name__, reg, self.hparams.reg_weight)
+            self.add_regularizer('D', reg, self.hparams.reg_weight)
             regs.append(reg)
         self.regs = nn.ModuleList(regs)
 
@@ -132,8 +130,8 @@ class DomainGeneralization(pl.LightningModule):
 
     @pl.data_loader
     def val_dataloader(self):
-        dataset = self.datasets[1]
-        return data.DataLoader(dataset, batch_size=self.hparams.batch_size, shuffle=False)
+        return [
+            data.DataLoader(self.datasets[i+1], batch_size=self.hparams.batch_size, shuffle=False) for i in range(2)]
 
     @pl.data_loader
     def test_dataloader(self):
@@ -185,6 +183,12 @@ class DomainGeneralization(pl.LightningModule):
 
     def eval_end(self, outputs):
         avg_result = OrderedDict()
+        if isinstance(outputs[0], list):
+            avg_result_list = [self.eval_end(o) for o in outputs]
+            for i, result in enumerate(avg_result_list):
+                for k, v in result.items():
+                    avg_result["{}-{}".format(k, i)] = v
+            return avg_result
         for k, v in outputs[0].items():
             avg_result[k] = 0.0
         for output in outputs:
@@ -194,19 +198,20 @@ class DomainGeneralization(pl.LightningModule):
             avg_result[k] /= len(outputs)
         return avg_result
 
-    def validation_step(self, batch, batch_idx):
+    def validation_step(self, batch, batch_idx, dataset_idx):
         return self.eval_batch(batch, batch_idx)
 
     def validation_end(self, outputs):
         avg_result = self.eval_end(outputs)
-        logs = check_invariance(
-            self.E, self.datasets[0], 10, self.datasets[1], self.D_hiddens,
-            self.val_layers, self.num_domains, on_gpu=self.on_gpu,
-            lr=self.hparams.lr
-        )
-        for k, v in logs.items():
-            avg_result[k] = v
-        return {'log': avg_result, 'val_loss': avg_result['y-loss']}
+        for i, D_hiddens in enumerate([[], [400], [800], [400, 100]]):
+            logs = check_invariance(
+                self.E, self.datasets[0], 10, self.datasets[1], D_hiddens,
+                self.val_layers, self.num_domains, on_gpu=self.on_gpu,
+                lr=self.hparams.lr
+            )
+            for k, v in logs.items():
+                avg_result['inv{}-{}'.format(i, k)] = v
+        return {'log': avg_result}
 
     def test_step(self, batch, batch_idx):
         return self.eval_batch(batch, batch_idx)
@@ -228,6 +233,7 @@ class DomainGeneralization(pl.LightningModule):
         parser.add_argument('--reg_name', default='dan', type=str)
         parser.add_argument('--reg_weight', default=1.0, type=float)
         parser.add_argument('--D_hiddens', default='400', type=str)
+        parser.add_argument('--K', default=1, type=int)
 
         return parser
 

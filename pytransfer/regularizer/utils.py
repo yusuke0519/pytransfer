@@ -10,11 +10,16 @@ def calc_acc(outputs, targets):
 
 
 class Discriminator(nn.Module):
-    def __init__(self, num_domains, input_shape, hiddens, sn=False, dropout=0.0, use_softmax=True, label_dim=None, bias=True):
+    def __init__(
+            self, num_domains, input_shape, hiddens, sn=False,
+            dropout=0.0, use_softmax=True, label_dim=None, bias=True):
         super(Discriminator, self).__init__()
         self.num_domains = num_domains
         self.discriminator = get_classifier(hiddens, input_shape[1], dropout=dropout, sn=sn)
-        module = nn.Linear(hiddens[-1], num_domains, bias=bias)
+        if len(hiddens) == 0:
+            module = nn.Linear(input_shape[1], num_domains, bias=bias)
+        else:
+            module = nn.Linear(hiddens[-1], num_domains, bias=bias)
         if sn:
             module = SpectralNorm(module)
         self.linear = module
@@ -81,8 +86,8 @@ class SpectralNorm(nn.Module):
 
         height = w.data.shape[0]
         for _ in range(self.power_iterations):
-            v.data = l2normalize(torch.mv(torch.t(w.view(height,-1).data), u.data))
-            u.data = l2normalize(torch.mv(w.view(height,-1).data, v.data))
+            v.data = l2normalize(torch.mv(torch.t(w.view(height, -1).data), u.data))
+            u.data = l2normalize(torch.mv(w.view(height, -1).data, v.data))
 
         # sigma = torch.dot(u.data, torch.mv(w.view(height,-1).data, v.data))
         sigma = u.dot(w.view(height, -1).mv(v))
@@ -90,9 +95,9 @@ class SpectralNorm(nn.Module):
 
     def _made_params(self):
         try:
-            u = getattr(self.module, self.name + "_u")
-            v = getattr(self.module, self.name + "_v")
-            w = getattr(self.module, self.name + "_bar")
+            getattr(self.module, self.name + "_u")
+            getattr(self.module, self.name + "_v")
+            getattr(self.module, self.name + "_bar")
             return True
         except AttributeError:
             return False

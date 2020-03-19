@@ -43,6 +43,19 @@ class EnsembleDAN(_Reguralizer):
         g = torch.stack([_D(z) for _D in self.D], dim=-1)
         return nn.functional.log_softmax(g.mean(dim=-1), dim=1)
 
+    def concat_prob(self, z):
+        return torch.stack([nn.functional.softmax(_D(z), dim=1) for _D in self.D], dim=-1)
+
+    def adaptive_diversity_promoting(self, z, d):
+        def remove_correct_index(dim, correct_index):
+            index = list(range(dim))
+            index.pop(correct_index)
+            return index
+
+        prob = self.concat_prob(z)
+        prob = torch.stack([p[remove_correct_index(prob.shape[1], _d)] for p, _d in zip(prob, d)])
+        return torch.log(torch.det(torch.bmm(prob, prob.permute(0, 2, 1)))).mean(dim=-1)
+
     def update(self, on_gpu=False):
         # All the discriminators are trained using same batch of data.
         for _ in range(self.K):
@@ -50,12 +63,14 @@ class EnsembleDAN(_Reguralizer):
             X, _, d = self.get_batch(on_gpu)
             z = self.feature_extractor(X).data
             loss = 0
-            mean_prob = self.mean_prob(z).data
+            # mean_prob = self.mean_prob(z).data
             for _D in self.D:
                 d_pred = nn.functional.log_softmax(_D(z), dim=1)
                 loss += nn.NLLLoss()(d_pred, d)
-                kl_loss = nn.KLDivLoss(reduction="sum")(d_pred, torch.exp(mean_prob))
-                loss -= self.KL_weight * kl_loss
+                # kl_loss = nn.KLDivLoss(reduction="sum")(d_pred, torch.exp(mean_prob))
+                # loss -= self.KL_weight * kl_loss
+            # ADP = self.adaptive_diversity_promoting(z, d)
+            # loss -= 0.0 * ADP
             loss.backward()
             self.optimizer.step()
 
@@ -75,7 +90,8 @@ class EnsembleDAN(_Reguralizer):
         acc = torch.sum(d == d_hat).item() / (len(d) * 1.0)
         d_mean = torch.exp(mean_prob).mean(dim=0)
         d_ent_reg = torch.sum(-d_mean*torch.log(d_mean))
-        result = {'loss': loss.item(), 'acc': acc, 'entropy': d_ent_reg.item()}
+        ADP = self.adaptive_diversity_promoting(z, d)
+        result = {'loss': loss.item(), 'acc': acc, 'entropy': d_ent_reg.item(), 'ADP': ADP.item()}
         for i, _D in enumerate(self.D):
             d_pred = nn.functional.log_softmax(_D(z), dim=1)
             loss = nn.NLLLoss()(d_pred, d)
@@ -88,7 +104,7 @@ class EnsembleDAN(_Reguralizer):
                 'loss-{}'.format(i): loss.item(),
                 'acc-{}'.format(i): acc,
                 'kl-{}'.format(i): kl_loss.item(),
-                'entropy-{}'.format(i): d_ent_reg.item()
+                'entropy-{}'.format(i): d_ent_reg.item(),
             }
             result.update(_result)
         return result

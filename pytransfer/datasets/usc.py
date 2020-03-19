@@ -1,5 +1,7 @@
 # # -*- coding: utf-8 -*-
-import os, zipfile, glob
+import os
+import zipfile
+import glob
 import wget
 
 import numpy as np
@@ -27,7 +29,6 @@ class _SingleUser(data.Dataset):
             self.download()
         scaler = StandardScaler()
 
-
         self.domain_key = domain_key
 
         file_list = glob.glob(os.path.join(self.path, self.domain_key.replace('S', 'Subject'), "a*.mat"))
@@ -39,8 +40,6 @@ class _SingleUser(data.Dataset):
             if scaler is not None:
                 sr = scaler.fit_transform(sr)  # Preprocess
             X = sampling(sr, 'sliding', dtype='np', l_sample=l_sample, interval=interval)
-	    # X_shape = X.shape
-            # X = X.reshape((1, X_shape[0], X_shape[1], X_shape[2])).swapaxes(0, 2)
             y = [int(data['activity_number'][0])-1] * X.shape[0]
             sensor_readings[i] = X
             activity_labels[i] = y
@@ -67,14 +66,14 @@ class _SingleUser(data.Dataset):
 class USC(DomainDatasetBase):
     SingleDataset = _SingleUser
     num_classes = 12
+
     def __init__(self, domain_keys, require_domain=True, datasets=None, l_sample=30, interval=15):
         self.interval = interval
         self.l_sample = l_sample
         super(USC, self).__init__(domain_keys, require_domain, datasets=datasets)
-    
+
     def get_single_dataset(self, domain_key, **kwargs):
         return self.SingleDataset(domain_key=domain_key, **kwargs)
 
     def domain_specific_params(self):
         return {'l_sample': self.l_sample, 'interval': self.interval}
-
