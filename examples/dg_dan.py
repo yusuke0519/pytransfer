@@ -268,6 +268,7 @@ if __name__ == '__main__':
     parser.add_argument('--epoch', default=5, type=int)
     parser.add_argument('--seed', default=1234, type=int)
     parser.add_argument('-F', action='store_true')
+    parser.add_argument('-S', action='store_true', help='save model parameter')
 
     parser = DomainGeneralization.add_model_specific_args(parser)
     hparams = parser.parse_args()
@@ -292,13 +293,18 @@ if __name__ == '__main__':
         mlf_logger = MLFlowLogger(experiment_name=EXPERIMENT_NAME)
         # mlf_logger = MLFlowLogger(experiment_name=EXPERIMENT_NAME, tracking_uri="s3://log")
         logging.info("MLF Run ID: {}".format(mlf_logger.run_id))
-        checkpoint = ModelCheckpoint(
-                filepath=os.path.join(os.getcwd(), EXPERIMENT_NAME, str(mlf_logger.run_id)),
-                save_top_k=-1,
-        )
-        trainer = pl.Trainer(
-            mlf_logger, gpus=1,
-            max_epochs=hparams.epoch, early_stop_callback=False, checkpoint_callback=checkpoint)
+        if hparams.S is True:
+            checkpoint = ModelCheckpoint(
+                    filepath=os.path.join(os.getcwd(), EXPERIMENT_NAME, str(mlf_logger.run_id)),
+                    save_top_k=-1,
+            )
+            trainer = pl.Trainer(
+                mlf_logger, gpus=1,
+                max_epochs=hparams.epoch, early_stop_callback=False, checkpoint_callback=checkpoint)
+        else:
+            trainer = pl.Trainer(
+                mlf_logger, gpus=1,
+                max_epochs=hparams.epoch, early_stop_callback=False)
 
         trainer.fit(model)
         trainer.test()
