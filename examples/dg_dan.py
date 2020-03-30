@@ -6,7 +6,7 @@
 from future.utils import iteritems
 import os
 from collections import OrderedDict
-from argparse import ArgumentParser
+from argparse import ArgumentParser, Namespace
 
 import torch
 from torch import nn
@@ -222,9 +222,7 @@ class DomainGeneralization(pl.LightningModule):
         return {'log': {'test-' + k: v for k, v in avg_result.items()}, 'test_loss': avg_result['y-loss']}
 
     @staticmethod
-    def add_model_specific_args(parent_parser):
-        parser = ArgumentParser(parents=[parent_parser])
-
+    def add_model_specific_args(parser):
         # dataset
         parser.add_argument('--dataset_name', default='mnistr', type=str)
         parser.add_argument('--test_domain', default='M75', type=str)
@@ -252,29 +250,9 @@ def check_finish(hparams, experiment_name):
     return len(finished_runs) > 0
 
 
-if __name__ == '__main__':
-    from pytorch_lightning.logging import MLFlowLogger
-    from pytorch_lightning.callbacks import ModelCheckpoint
-    import mlflow
-    from mlflow.tracking.client import MlflowClient
-    from mlflow.entities import ViewType
-
-    EXPERIMENT_NAME = 'Test'
-
-    print("Execute example")
-    parser = ArgumentParser(add_help=False)
-    parser.add_argument('--batch_size', default=128, type=int)
-    parser.add_argument('--lr', default=0.001, type=float)
-    parser.add_argument('--epoch', default=5, type=int)
-    parser.add_argument('--seed', default=1234, type=int)
-    parser.add_argument('-F', action='store_true')
-    parser.add_argument('-S', action='store_true', help='save model parameter')
-
-    parser = DomainGeneralization.add_model_specific_args(parser)
-    hparams = parser.parse_args()
-
+def command_execute(hparams, experiment_name):
     # Check if the task if already finished
-    flag = check_finish(hparams, EXPERIMENT_NAME)
+    flag = check_finish(hparams, experiment_name)
     if flag and not hparams.F:
         logging.info("The task has been already finished or running")
         logging.info("Skip this run")
@@ -309,3 +287,64 @@ if __name__ == '__main__':
         trainer.fit(model)
         trainer.test()
         print(model.test_result)
+
+
+def generate_json(hparams, experiment_name):
+    import json
+    import uuid
+    del hparams.__dict__['handler']
+    log_dir = hparams.__dict__['dir']
+    file_name = "{}.json".format(str(uuid.uuid4()))
+    del hparams.__dict__['dir']
+    flag = check_finish(hparams, experiment_name)
+
+    print(hparams)
+    if flag and not hparams.F:
+        logging.info("The task has been already finished or running")
+        logging.info("Skip save json file")
+        logging.info(hparams)
+        return None
+    with open(os.path.join(log_dir, file_name), mode="w") as f:
+        json.dump(hparams.__dict__, f, indent=4)
+
+
+def execute_from_json(params, experiment_name):
+    import json
+    with open(params.f) as f:
+        _dict = json.load(f)
+        hparams = Namespace(**_dict)
+    command_execute(hparams, experiment_name)
+
+
+if __name__ == '__main__':
+    from pytorch_lightning.logging import MLFlowLogger
+    from pytorch_lightning.callbacks import ModelCheckpoint
+    import mlflow
+    from mlflow.tracking.client import MlflowClient
+    from mlflow.entities import ViewType
+
+    EXPERIMENT_NAME = 'Test'
+
+    parser = ArgumentParser(description="Experimet management")
+    subparsers = parser.add_subparsers()
+
+    parser_generate = subparsers.add_parser('gen', help='generate json file from arguments')
+    parser_generate.add_argument('--dir', default='./jsons', type=str)
+    parser_generate.add_argument('--batch_size', default=128, type=int)
+    parser_generate.add_argument('--lr', default=0.001, type=float)
+    parser_generate.add_argument('--epoch', default=5, type=int)
+    parser_generate.add_argument('--seed', default=1234, type=int)
+    parser_generate.add_argument('-F', action='store_true')
+    parser_generate.add_argument('-S', action='store_true', help='save model parameter')
+    parser_generate = DomainGeneralization.add_model_specific_args(parser_generate)
+    parser_generate.set_defaults(handler=generate_json)
+
+    parser_json = subparsers.add_parser('json', help='execute from json config')
+    parser_json.add_argument('-f', default='./params.json', type=str)
+    parser_json.set_defaults(handler=execute_from_json)
+
+    hparams = parser.parse_args()
+    if hasattr(hparams, 'handler'):
+        hparams.handler(hparams, EXPERIMENT_NAME)
+    else:
+        parser.print_help()
