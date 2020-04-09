@@ -238,6 +238,7 @@ class DomainGeneralization(pl.LightningModule):
 
 def check_finish(hparams, experiment_name):
     # NOTE : This is not a perfect logic. For example, the aborted run is also couted as completed for now.
+    logging.info("checking status")
     query = ' and '.join(
         ['params.{}="{}"'.format(k, str(v)) for k, v in vars(hparams).items()])
     experiment = mlflow.get_experiment_by_name(experiment_name)
@@ -247,6 +248,7 @@ def check_finish(hparams, experiment_name):
         experiment_ids=[mlflow.get_experiment_by_name(experiment_name).experiment_id],
         filter_string=query, run_view_type=ViewType.ALL
     )
+    logging.info("done")
     return len(finished_runs) > 0
 
 
@@ -324,7 +326,7 @@ if __name__ == '__main__':
     from mlflow.entities import ViewType
 
     EXPERIMENT_NAME = 'j2020-1'
-
+    logging.info("Start")
     parser = ArgumentParser(description="Experimet management")
     subparsers = parser.add_subparsers()
 
@@ -345,6 +347,7 @@ if __name__ == '__main__':
 
     hparams = parser.parse_args()
     if hasattr(hparams, 'handler'):
+        logging.info("Call")
         hparams.handler(hparams, EXPERIMENT_NAME)
     else:
         parser.print_help()
