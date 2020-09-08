@@ -325,7 +325,7 @@ if __name__ == '__main__':
     from mlflow.tracking.client import MlflowClient
     from mlflow.entities import ViewType
 
-    EXPERIMENT_NAME = 'DG_DAN'
+    EXPERIMENT_NAME = 'j2020-1'
     logging.info("Start")
     parser = ArgumentParser(description="Experimet management")
     subparsers = parser.add_subparsers()
